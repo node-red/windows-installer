@@ -2,3 +2,5 @@
 The Node-RED installer for Windows
 
 Current state: In Developement...
+
+![](shot.png)
