@@ -105,3 +105,6 @@ dist
 
 IDP_1.5.1/.DS_Store
 .DS_Store
+
+Output/
+archive/
