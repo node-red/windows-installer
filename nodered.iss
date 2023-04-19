@@ -1631,7 +1631,9 @@ begin
 
   if Length(main.node.current) > 0 then begin
     m:= m + 'Currently installed: ' + main.node.current + NewLine;
+    if Length(main.node.selected) > 0 then begin
     m:= m + 'Changing to:         ' + main.node.selected + NewLine;
+    end;
   end else begin
     m:= m + 'Currently NOT installed.' + NewLine;
     m:= m + 'Installing: ' + main.node.selected + NewLine;
@@ -1639,12 +1641,14 @@ begin
 
   // m:= m + NewLine;
 
+  if Length(main.node.selected) > 0 then begin
   if main.node.run_silent then begin
     m:= m + '+ Node.js installer will run in the background.' + NewLine;
 
     if main.node.install_tools then
       m:= m + '+ Additional Tools for Windows will be installed.' + NewLine;
   
+  end;
   end;
 
   m:= m + NewLine;
