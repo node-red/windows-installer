@@ -220,7 +220,7 @@ begin
       end;
 }
 
-      if Length(_path) > 0 then begin 
+      if Length(_path) > 0 then begin
         main.red.items[index].action := _path;
         box.ItemCaption[index] := 'Custom path: ' + _path;
         main.red.installs[_inst_index].path := _path;

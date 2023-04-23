@@ -1,14 +1,33 @@
-#include <.\IDP_1.5.1\idp.iss>
-; #include <.\amProgress.API.pas>
+; *****
+; * Windows Installer for Node-RED
+; * Definition file for the Inno Setup compiler.
+; * Copyright 2023 Ralph Wetzel
+; * License MIT
+; * https://www.github.com/ralphwetzel/node-red-windows-installer
+; *
 
-; Windows Installer for Node-RED
-; Definition file for the Inno Setup compiler.
-; Copyright 2023 Ralph Wetzel
-; License MIT
-; https://www.github.com/ralphwetzel/node-red-windows-installer
+; *****
+; * This software uses the following 3rd party elements:
+; *
 
-; We configure all constants via an INI file.
-; That's easier for maintenence rather than searching for things in the source code
+;   JsonParser
+;   https://github.com/koldev/JsonParser
+;   This code is in the Public Domain. NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
+;   ./contrib/JsonParser.pas
+
+;   Inno Download Plugin
+;   Copyright (c) 2013-2015 Mitrich Software
+;   https://mitrichsoftware.wordpress.com/inno-setup-tools/inno-download-plugin/
+;   License zlib
+;   ./contrib/IDP_1.5.1
+
+
+; *****
+; * PreProcessor setup:
+; * We configure all constants via an INI file.
+; * That's easier for maintenence rather than searching for things in the source code
+; *
+
 #define INIFile RemoveBackslash(SourcePath) + "\setup.ini"
 
 ; Node.js Default Version - that we propose to install if none is present
@@ -20,7 +39,10 @@
 ; URL to download node.js license from
 #define NodeLicenseURL ReadIni(INIFILE, "node", "license")
 #define NodeLicenseTmpFileName "node.license"
-                                              
+
+; Root URL to download node.js files from
+#define NodeDownloadURL ReadIni(INIFILE, "node", "download", 'https://nodejs.org/dist')        
+
 ; URL to download Node-RED license from
 #define REDLicenseURL ReadIni(INIFILE, "red", "license")
 #define REDLicenseTmpFileName "red.license"                                             
@@ -36,6 +58,24 @@
 
 ; This is the lowest version number we offer for installation
 #define REDMinVersion ReadIni(INIFile, "red", "min", "1.0")
+
+; Count of parallel installations we provision for to manage
+; We need this explicitely as there's no way to add dynamically to the [Run] section
+#define REDProvisionCount ReadIni(INIFile, "red", "provision", "5")
+
+; The root key for bookkeeping of the Node-RED installations we know of on this system
+#define REDInstallationsRegRoot 'SOFTWARE\Node-RED\installations'
+
+; py shall become something like '3.7.6'
+#define py ReadIni(INIFile, "python", "version")
+; for pth we extract the first two digits of py      
+#define pth Copy(StringChange(py, '.', ''), 1, 2)
+
+; the download link of the VS Studio Build Tools
+; check as well: https://visualstudio.microsoft.com/downloads/
+#define VSBuildToolsURL ReadIni(INIFile, "vs", "download", 'https://aka.ms/vs/17/release/vs_BuildTools.exe')
+; 15 = 2015
+#define VSBuildToolsMinVersion ReadIni(INIFile, "vs", "min", '15')
 
 #define MyAppName "Node-RED"
 #define MyAppVersion "> 3.0"
@@ -64,7 +104,7 @@ OutputBaseFilename="Node-RED Installer"
 Compression=lzma
 SolidCompression=yes
 SetupLogging=yes
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 VersionInfoCopyright={#ReadIni(INIFile, "installer", "copyright", "")}
 VersionInfoDescription={#ReadIni(INIFile, "installer", "description", "")}
 VersionInfoVersion={#ReadIni(INIFile, "installer", "version", "")}
@@ -88,6 +128,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "graphics\nodejs.bmp"; DestDir: "{tmp}"; DestName: "nodejs.bmp"; Flags: dontcopy
 Source: "graphics\nrhex24.bmp"; DestDir: "{tmp}"; DestName: "node-red.bmp"; Flags: dontcopy
 Source: "graphics\node-red-icon-small.bmp"; DestDir: "{tmp}"; DestName: "node-red-small.bmp"; Flags: dontcopy
+Source: "tools\vswhere.exe"; DestDir: "{tmp}"; DestName: "vswhere.exe"
+Source: "bat\setup_loop.bat"; DestDir: "{tmp}"
 
 [Icons]
 ; Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -101,8 +143,133 @@ english.WelcomeLabel1=Welcome to the%n[name] Setup Wizard
 english.WelcomeLabel2=This will install Node-RED on your computer.%n%nInitially we check the version of Node.js installed is %1 or greater. We will try to install node %2 if none is found. Optionally you can choose to install node %3.%n%nIf necessary we will then remove the old core of Node-RED, before then installing the latest version. You can also optionally specify the version required.%n%nWe will finally try to run 'npm rebuild' to refresh any extra nodes you have installed that may have a native binary component. While this normally works ok, you need to check that it succeeds for your combination of installed nodes.%n%nIt is recommended that you close all other applications before continuing.
 WizardReady=Final verification
 ReadyLabel1=We just ran a final verification of your installation setup.
+FinishedHeadingLabel=Completing the%n[name] Setup Wizard
+
+[CustomMessages]
+english.MSG_FAILED_FINISHED1=Setup failed to install Node-RED on your computer:
+english.MSG_FAILED_FINISHED2=Sorry for this inconvenience!
+
+[Run]
+
+; main.error is the global Error flag
+; Each step checks if this is set, and if returns False@Check!
+
+; Check if Node.js should be uninstalled.
+; Run the uninstall; GUID queried from Registry.
+; Verify that no Node.js is known.
+Filename: "msiexec"; \
+  Parameters: "/norestart /quiet /uninstall {code:GetInstalledNodeGUID}"; \
+  Flags: runascurrentuser; \
+  StatusMsg: "Uninstalling Node.js v{code:GetNodeVersionMain|current}..."; \
+  Check: RunCheck('rcsNodeUninstall', ''); \
+  BeforeInstall: SetupRunConfig; \
+  AfterInstall: Confirm('csNoNode', '');
+
+
+; The next two run - in general - the same command.
+; #1 Installs in silent mode
+; #2 Shows the Node installer & hides our installer
+; Only one of these will be executed - as switched by the Check function.
+; We do not install the components addressed by flags 'NodeEtwSupport' & 'NodePerfCtrSupport'
+
+; Check that Node.js should be installed
+; Run the installer
+; Verify that Node.js is ready on the system.
+Filename: "msiexec"; \
+  Parameters: "/i {tmp}\node.msi TARGETDIR=""C:\Program Files\nodejs\"" ADDLOCAL=""DocumentationShortcuts,EnvironmentPathNode,EnvironmentPathNpmModules,npm,NodeRuntime,EnvironmentPath"" /qn"; \
+  Flags: runascurrentuser; \
+  StatusMsg: "Installing Node.js v{code:GetNodeVersionMain|selected}..."; \
+  Check: RunCheck('rcsNodeInstall', 'silent'); \
+  BeforeInstall: SetupRunConfig; \
+  AfterInstall: Confirm('csNode', ExpandConstant('{code:GetNodeVersionMain|selected}'));
+
+Filename: "msiexec"; \
+  Parameters: "/i {tmp}\node.msi TARGETDIR=""C:\Program Files\nodejs\"" ADDLOCAL=""DocumentationShortcuts,EnvironmentPathNode,EnvironmentPathNpmModules,npm,NodeRuntime,EnvironmentPath"" "; \
+  Flags: runascurrentuser hidewizard; \
+  StatusMsg: "Installing Node.js v{code:GetNodeVersionMain|selected}..."; \
+  Check: RunCheck('rcsNodeInstall', 'show'); \
+  BeforeInstall: SetupRunConfig; \
+  AfterInstall: Confirm('csNode', ExpandConstant('{code:GetNodeVersionMain|selected}'));
+
+Filename: "{tmp}\python_installer.exe"; \
+  Parameters: "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 Include_launcher=0"; \
+  Flags: runascurrentuser; \
+  StatusMsg: "Installing Python..."; \
+  Check: RunCheck('rcsPython', 'no'); \
+  BeforeInstall: SetupRunConfig; \
+  AfterInstall: Confirm('csPython', '');
+
+Filename: "{tmp}\VSBT_installer.exe"; \
+  Parameters: "--norestart --quiet --includeRecommended --add Microsoft.VisualStudio.Worlkload.VCTools"; \
+  Flags: runascurrentuser; \
+  StatusMsg: "Installing VisualStudio BuildTools..."; \
+  Check: RunCheck('rcsVSBuildTools', ''); \
+  BeforeInstall: SetupRunConfig;
+  ; AfterInstall: Confirm('csVSBuildTools', '');
+
+; This doesn't work when running the VS installer w/ --quiet
+; Parameters: """WINDOWTITLE eq VISUAL STUDIO Installer"" setup.exe"; \
+; As 'setup.exe' is quite ambigous, we've checked in PrepareInstallation that there
+; wasn't another process with this IMAGENAME running! 
+
+Filename: "{tmp}\setup_loop.bat"; \
+  Parameters: """IMAGENAME eq setup.exe"" setup.exe"; \
+  Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+  StatusMsg: "Waiting for Visual Studio Installer to finish its job..."; \
+  Check: RunCheck('rcsVSBuildTools', ''); \
+  BeforeInstall: SetupRunConfig; \
+  AfterInstall: Confirm('csVSBuildTools', '');
+
+; There's a breaking change introduced - intentionally - in NPM9 (Node.js v18+) 
+; that dis-allows non-standard config settings
+; Thus the following doesn't work (anymore).
+; Not sure about the consequences...
+; Reference: https://github.com/npm/cli/issues/5852
+
+; Filename: "npm"; \
+;   Parameters: "config set python ""{code:GetPythonPath}"""; \
+;   WorkingDir: "{code:GetNodeDataReg|path}"; \
+;   Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+;   StatusMsg: "Configuring Python path for Node.js..."; \
+;   Check: RunCheck('rcsPythonConfig', ''); \
+;   BeforeInstall: SetupRunConfig; \
+;  AfterInstall: Confirm('csPythonConfig', '');
+
+#define i
+
+#sub RemoveRED
+  Filename: "npm"; \
+    Parameters: "uninstall {code:GetREDActionGlobal|{#i}} node-red"; \
+    WorkingDir: "{code:GetREDActionPath|{#i}}"; \
+    Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+    StatusMsg: "Removing {code:GetREDCurrentMsg|{#i}}..."; \
+    Check: RunCheck('rcsREDRemove', '{#i}'); \
+    BeforeInstall: SetupRunConfig; \
+    AfterInstall: REDRemove('{#i}');
+#endsub
+
+#sub InstallRED
+  Filename: "npm"; \
+    Parameters: "install {code:GetREDActionGlobal|{#i}} node-red@{code:GetREDActionAction|{#i}}"; \
+    WorkingDir: "{code:GetREDActionPath|{#i}}"; \
+    Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+    StatusMsg: "Installing {code:GetREDActionMsg|{#i}}..."; \
+    Check: RunCheck('rcsREDInstall', '{#i}'); \
+    BeforeInstall: REDPrepare('{#i}'); \
+    AfterInstall: REDFinalize('{#i}');
+#endsub
+
+#for {i = 0; i < Int(REDProvisionCount, 5); i++} RemoveRED
+#for {i = 0; i < Int(REDProvisionCount, 5); i++} InstallRED
+
+#undef i
+
+
+
+#include <.\contrib\IDP_1.5.1\idp.iss>
 
 [Code]
+// #include <.\contrib\JsonParser.pas>
 #include <.\iss\forward.iss>
 
 // https://stackoverflow.com/questions/20584263/how-to-install-node-js-in-custom-folder-silently-on-windows
@@ -139,9 +306,15 @@ type
   end;
 
 
+  rREDCalcData = record
+    path: string;     // if defined, ensure empty directory & create package.json
+    port: integer;
+  end;
+
   sREDInstallationKind = (rikGlobal, rikPath, rikNew, rikVoid);
 
   rREDInstallation = record
+    key: string;
     id: TObject;
     kind: sREDInstallationKind;
     name: string;
@@ -152,7 +325,8 @@ type
     action: string;
     autostart: boolean;
     icon: boolean;
-    final_path: string;
+    // final_path: string;
+    calc: rREDCalcData;
     // add additional properties here!
   end;
 
@@ -197,6 +371,22 @@ type
     download: TDownloadWizardPage;
   end;
 
+  rInstallationError = record
+    status: boolean; 
+    msg: string;
+  end;
+
+  rPythonData = record
+    version: string;      // proposed version (via .ini)
+    npm: boolean;         // is npm aware of a python version?
+    installed: string;    // installed version?
+    path: string;
+  end;
+
+  rVSData = record
+    version: string;
+  end;
+
   TInstallerData = record
     node: TNodeData;
     red: TREDData;
@@ -210,6 +400,9 @@ type
     bit: String;
 
     pages: TPageID;
+    error: rInstallationError;    // Global Installation Error Status
+    python: rPythonData;
+    vs: rVSData;
 
   end;
 
@@ -270,7 +463,6 @@ procedure debugInt(int: integer);
 begin
   debug(IntToStr(int));
 end;
-
 
 // pastebin.com/STcQLfKR
 Function SplitString(const Value: string; Delimiter: string; Strings: TStrings): Boolean;
@@ -361,6 +553,7 @@ begin
   B := (Color shr 16) and $FF;
 end;
 
+
 function CompareVersions( checkVersion, compareVersion: String): Integer;
 var
   checkV, compV: TStringList;
@@ -377,6 +570,8 @@ begin
   l1 := checkV.Count;
   l2 := compV.Count;
 
+  debug(checkVersion);
+  debug(compareVersion);
   debug(IntToStr(Max(l1, l2)));
 
   for i:= 0 to Max(l1, l2) - 1 do begin
@@ -626,6 +821,10 @@ begin
         end;
         Result:=True;
       end;
+    end else begin
+      debug(Command);
+      debug(WorkingDir);
+      debug(SysErrorMessage(rc));
     end;
   end;
 end;
@@ -719,7 +918,7 @@ begin
     Height := ScaleY(_nodeVersion_cbInstallWindowsTools.Height);
     Left := _nodeVersion_cbHideInstaller.Left;
     Width := _nodeVersion_cbHideInstaller.Width;
-    Caption := 'Install Windows Tools for Native Node.js Modules.';
+    Caption := 'Install Windows Tools for Native Node.js Modules - if necessary!';
     Checked := True;
     Enabled := True;
   end;
@@ -967,6 +1166,10 @@ begin
 end;
 
 
+function GetPythonPath(param: string): string; forward;
+function GetVSBuildToolsVersion(): string; forward;
+function GetNPMPythonConfig(): string; forward;
+
 function RunDataPrepPage(): Boolean;
 
 #define ProgressMax 10;
@@ -996,6 +1199,8 @@ var
   red_versions: TREDVersionArray;
   // current_version: string;
   prefix: string;
+
+  _btv: string;
 
 begin
 
@@ -1234,6 +1439,27 @@ begin
     _ppage.SetText('Preparing the Node-RED installation setup page...', '');
     Result := MakeRedActionPage(main.pages.red_action) and Result;
 
+    _ppage.SetText('Verifying the Python environment...', '');
+    main.python.version := '{#py}';
+
+    // Check if npm is already configured correctly
+    if Length(main.node.current) > 0 then begin
+      main.python.path := GetNPMPythonConfig();
+      if Length(main.python.path) > 0 then begin
+        main.python.npm := True;
+      end;
+    end;
+
+    // Check if we have at least a python installation
+    if Length(main.python.path) < 1 then
+      main.python.path := GetPythonPath('');
+
+    _ppage.SetText('Verifying the VisualStudio BuildTools setup...', '');
+    if not FileExists(ExpandConstant('{tmp}\vswhere.exe')) then ExtractTemporaryFile('vswhere.exe');
+
+    // Check if vswhere is able to find an installation
+    main.vs.version := GetVSBuildToolsVersion();
+
   finally
     _ppage.Hide();
   end;
@@ -1399,8 +1625,8 @@ begin
   Result := True;
   red_image := 'node-red.bmp';
 
-  // if CurPageID = wpWelcome then
-  //    Exit;
+  if CurPageID = wpWelcome then begin
+  end;
 
   if CurPageID = wpWelcome then begin
 
@@ -1438,7 +1664,7 @@ begin
         nv := IntToStr(main.node.majors[i]);
 
         file := 'node' + nv + '.sha';
-        _dp.Add('https://nodejs.org/dist/latest-v' + nv + '.x/SHASUMS256.txt', file, '');      
+        _dp.Add('{#NodeDownloadURL}/latest-v' + nv + '.x/SHASUMS256.txt', file, '');      
 
       end;
 
@@ -1606,12 +1832,25 @@ begin
 
   end;
 
+  // Customize FinishedPage in case of error.
+  if CurPageID = wpFinished then begin
+    if main.error.status then begin
+      WizardForm.FinishedHeadingLabel.Caption := 'Node-RED Setup Error';
+      WizardForm.FinishedLabel.Caption := ExpandConstant('{cm:MSG_FAILED_FINISHED1}') + #13#10#13#10 + '>> ' + main.error.msg + #13#10#13#10 + ExpandConstant('{cm:MSG_FAILED_FINISHED2}');
+      WizardForm.FinishedLabel.AdjustHeight();
+
+      wizardform.YesRadio.Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + ScaleY(8);
+    end;  
+  end;
+
+
 end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 var
   m, mm: string;
   i, ii, l, f: integer;
+  tag: integer;
   p, pp: string;
   c, cc: boolean;
   _lbl: string;
@@ -1619,6 +1858,8 @@ var
 
   _paths: TStringList;
   _error: boolean;
+
+  _kind: sREDInstallationKind;
 
 begin
   
@@ -1632,7 +1873,7 @@ begin
   if Length(main.node.current) > 0 then begin
     m:= m + 'Currently installed: ' + main.node.current + NewLine;
     if Length(main.node.selected) > 0 then begin
-    m:= m + 'Changing to:         ' + main.node.selected + NewLine;
+      m:= m + 'Changing to:         ' + main.node.selected + NewLine;
     end;
   end else begin
     m:= m + 'Currently NOT installed.' + NewLine;
@@ -1642,13 +1883,13 @@ begin
   // m:= m + NewLine;
 
   if Length(main.node.selected) > 0 then begin
-  if main.node.run_silent then begin
-    m:= m + '+ Node.js installer will run in the background.' + NewLine;
+    if main.node.run_silent then begin
+      m:= m + '+ Node.js installer will run in the background.' + NewLine;
 
-    if main.node.install_tools then
-      m:= m + '+ Additional Tools for Windows will be installed.' + NewLine;
-  
-  end;
+      if main.node.install_tools then
+        m:= m + '+ Additional Tools for Windows will be installed.' + NewLine;
+    
+    end;
   end;
 
   m:= m + NewLine;
@@ -1663,15 +1904,18 @@ begin
   end;
 
   _global:= False;
+  tag := 0;
 
   for i:=0 to GetArrayLength(main.red.installs) - 1 do begin
 
-    if main.red.installs[i].kind = rikVoid then continue;
+    _kind := main.red.installs[i].kind;
+    if _kind = rikVoid then continue;
     
     m:= m + NewLine;
 
     if l > 1 then begin
-      m:= m + '#' + IntToStr(i+1) + ': ' + NewLine;
+      tag := tag + 1;
+      m:= m + '#' + IntToStr(tag) + ': ' + NewLine;
     end;
 
     if Length(main.red.installs[i].version) > 0 then begin
@@ -1694,7 +1938,7 @@ begin
         m:= m + 'Installing: ' + main.red.installs[i].action + NewLine;
       end;
 
-      if Length(main.red.installs[i].path) < 1 then begin
+      if ((_kind = rikGlobal) or (Length(main.red.installs[i].path) < 1)) then begin
         m:= m + '+ Global installation.' + NewLine;
         if not _global then begin
           _global := True;
@@ -1704,61 +1948,74 @@ begin
         end;
       end else begin
 
-        ii:= -1;
-        p:= '';
-        // lbl:= main.red.installs[i].name;
-        pp:= main.red.installs[i].path;
-        debug('mri: ' + main.red.installs[i].path);
+        pp := main.red.installs[i].path;
 
-        repeat 
-          
-          // First Check:
-          // Is another installation already using this path?
-          // c := False if YES!
-          f:=-1;
-          c:= (_paths.IndexOf(pp) < 0);
-          // if _paths.IndexOf(pp) > -1 then c := (f < 0);
+        if _kind = rikPath then begin 
+          if DirExists(pp) and FileExists(pp + '\package.json') then begin
+            // main.red.installs[i].calc.path := pp;
+          end else begin
+            _kind := rikNew;
+          end;
+        end;
 
-          debug('c: ' + BoolToStr(c));
+        if _kind = rikNew then begin
 
-          if c then begin
+          ii:= -1;
+          p:= '';
+          // lbl:= main.red.installs[i].name;
+          // pp:= main.red.installs[i].path;
+          debug('mri: ' + pp);
 
-            // Second Check:
-            // We take it, if the directory doesn't exist.
-            // cc := True => Dir does NOT exist!
-            if not DirExists(pp) then begin
-              cc:=True;
-              break;
+          repeat 
+            
+            // First Check:
+            // Is another installation already using this path?
+            // c := False if YES!
+            f:=-1;
+            c:= (_paths.IndexOf(pp) < 0);
+            // if _paths.IndexOf(pp) > -1 then c := (f < 0);
+
+            debug('c: ' + BoolToStr(c));
+
+            if c then begin
+
+              // Second Check:
+              // We take it, if the directory doesn't exist.
+              // cc := True => Dir does NOT exist!
+              if not DirExists(pp) then begin
+                cc:=True;
+                break;
+              end;
+
             end;
 
-          end;
+            // Final Check
+            // Is this Dir empty?
+            c:= isEmptyDir(pp) and c;
 
-          // Final Check
-          // Is this Dir empty?
-          c:= isEmptyDir(pp) and c;
+            if not c then begin
 
-          if not c then begin
+              // build a new path!
+              ii:=ii+1;
+              p:= 'Node-RED';
+              if ii > 0 then
+                p:= p + '(' + IntToStr(ii) + ')';
+              
+              pp:= main.red.installs[i].path + '\' + p;
+              debug('pp: ' + pp);
+            end;
 
-            // build a new path!
-            ii:=ii+1;
-            p:= 'Node-RED';
-            if ii > 0 then
-              p:= p + '(' + IntToStr(ii) + ')';
-            
-            pp:= main.red.installs[i].path + '\' + p;
-            debug('pp: ' + pp);
-          end;
+          until c;
 
+          main.red.installs[i].calc.path:= pp;
 
-        until c;
+        end;
 
         _paths.Add(pp);
 
         m:= m + '+ Installation path: ' + pp + NewLine;
         if cc then 
           m:= m + '  + Directory will be created.' + NewLine;
-
-        main.red.installs[i].final_path:=pp;
 
       end;
     end;
@@ -1790,7 +2047,7 @@ begin
     main.red.error := True;
   end;
 
-
+{
   // UI Test only!
   m:= m + NewLine;
   m:= m + NewLine;
@@ -1800,8 +2057,821 @@ begin
   m:= m + '*** This version is for UI Test only.    ***' + NewLine;
   m:= m + '*** It does NOT install Node-RED!        ***' + NewLine;
   m:= m + '********************************************' + NewLine;
-
+}
   Result := m;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  i, ii: integer;
+
+  _dp: TDownloadWizardPage;
+
+  _nv, _msi, _sha: string;
+
+  _pv: string;
+  res: TArrayOfString;
+  parts: TStringList;
+
+begin
+
+  _nv := main.node.selected;
+  main.error.status := False;
+
+  if Length(_nv) < 1 then begin
+    Result := '';
+    Exit;
+  end;
+
+  Result := 'Failed to prepare the installation: ' + #13#10 + #13#10;
+
+  // Downloading the requested version of node.js
+  _dp := CreateDownloadPage('Downloading the Node.js installer...', '', nil);
+  _dp.Clear;
+
+  _sha := '';
+  for i:=0 to GetArrayLength(main.node.versions) - 1 do begin
+    if main.node.versions[i].latest = _nv then begin
+      _sha := main.node.versions[i].sha;
+      _msi := main.node.versions[i].msi;
+      break;
+    end;
+  end;
+
+  if Length(_msi) < 1 then begin
+    Result := Result + 'Node.js download file name is missing.';
+    Exit;
+  end;
+
+  _dp.Add('{#NodeDownloadURL}/v' + main.node.selected + '/' + _msi, 'node.msi', _sha);      
+
+  if main.node.install_tools then begin
+    if Length(main.python.path) < 1 then begin
+      // No python! Get python to install later.
+      if main.bit = 'x64' then begin
+        _dp.Add('https://www.python.org/ftp/python/{#py}/python-{#py}-amd64.exe', 'python_installer.exe', '');
+      end else begin
+        _dp.Add('https://www.python.org/ftp/python/{#py}/python-{#py}-win32.exe', 'python_installer.exe', '');
+      end;
+    end;
+  end;
+
+  if main.node.install_tools then begin
+    if Length(main.vs.version) < 1 then begin
+      // Need to download the BUilsTools!
+      _dp.Add('{#VSBuildToolsURL}', 'VSBT_installer.exe', '');
+    end;
+  end;
+
+  _dp.Show;
+  try
+    try
+      _dp.Download; // This downloads the files to {tmp}
+    except
+      if _dp.AbortedByUser then begin
+        Result := Result + 'File download aborted.';
+        Exit;
+      end else begin
+        Result := Result + AddPeriod(GetExceptionMessage);
+        Exit;
+      end;
+    end;
+  finally
+    _dp.Hide;
+  end;
+
+  if (main.node.run_silent and main.node.install_tools) then begin
+    SetArrayLength(res, 0);
+    RunCMD('tasklist /FI "IMAGENAME eq setup.exe" /FO Table /NH', '', res);
+    if GetArrayLength(res) > 0 then begin
+      for i:=0 to GetArrayLength(res) - 1 do begin
+        // If another program w/ image name 'setup.exe' is running,
+        // we cannot detect if the Visual Studio BuildTools Installer has finished it's job.
+        if StringChangeEx(res[i], 'setup.exe', '', True) > 0 then begin
+          Result := Result + 'Another installer seems to be running.' + #13#10 + 'Cannot install Native Build Tools for Node.js in the background.'
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  Result := '';
+
+end;
+
+
+function GetPythonPath(param: string): string;
+var
+  res: array of string;
+  parts: TStringList;
+  i: integer;
+begin
+  // Check if we have a python installation
+  SetArrayLength(res, 0);
+  RunCMD('python -V', '', res);
+  if GetArrayLength(res) = 1 then begin
+    // Python 3.11.2
+    parts := TStringList.Create();
+    if SplitString(res[0], ' ', parts) then begin
+      if parts[0] = 'Python' then begin
+        i := CompareVersions(parts[1], '3.10');
+        if i >= 0 then begin
+          SetArrayLength(res, 0);
+          RunCMD('where python', '', res);
+          if GetArrayLength(res) > 0 then begin
+            if FileExists(res[0]) then begin
+              Result := res[0];
+            end;
+          end;
+        end;
+      end;
+    end;
+  end;
+end;
+
+
+function GetVSBuildToolsVersion(): string;
+var
+  res: array of string;
+  version: TStringList;
+  _btv: string;
+begin
+  // Check if vswhere is able to find an installation
+  SetArrayLength(res, 0);
+  RunCMD('vswhere -products Microsoft.VisualStudio.Product.BuildTools -property installationVersion', ExpandConstant('{tmp}'), res);
+  if GetArrayLength(res) = 1 then begin
+    version := TStringList.Create();
+    if SplitString(res[0], '.', version) then begin
+      if version.Count > 1 then begin
+        if StrToIntDef(version[0], 0) > StrToIntDef('{#VSBuildToolsMinVersion}', 15) then begin   // 15 = 2015
+          _btv := res[0];
+          SetArrayLength(res, 0);
+          RunCMD('vswhere -products Microsoft.VisualStudio.Product.BuildTools -property isComplete', ExpandConstant('{tmp}'), res);
+          if GetArrayLength(res) = 1 then begin
+            if res[0] = '1' then begin
+              SetArrayLength(res, 0);
+              RunCMD('vswhere -products Microsoft.VisualStudio.Product.BuildTools -property isLaunchable', ExpandConstant('{tmp}'), res);
+              if GetArrayLength(res) = 1 then begin
+                if res[0] = '1' then begin
+                 Result := _btv;
+                  debug('BuildTools found: ' + main.vs.version);
+                end;
+              end;
+            end;
+          end;
+        end;
+      end;
+    end;
+  end;
+end;
+
+function GetNPMPythonConfig(): string;
+var
+  res: array of string;
+begin
+  // Check if npm is already configured correctly
+  SetArrayLength(res, 0);
+  RunCMD('npm config get python', '', res);
+  if GetArrayLength(res) = 1 then begin
+    if res[0] <> 'undefined' then begin
+      if FileExists(res[0]) then begin
+        Result := res[0];
+      end;
+    end;
+  end;
+end;
+
+
+
+// Used while installing the node.js
+// https://stackoverflow.com/questions/34336466/inno-setup-how-to-manipulate-progress-bar-on-run-section
+procedure SetMarqueeProgress(Marquee: Boolean);
+begin
+  if Marquee then begin
+    WizardForm.ProgressGauge.Style := npbstMarquee;
+  end else begin
+    WizardForm.ProgressGauge.Style := npbstNormal;
+  end;
+end;
+
+
+// To be used for the lengthy status messages in the [Run] section
+procedure SetupRunConfig();
+begin
+  SetMarqueeProgress(True);
+
+  WizardForm.StatusLabel.WordWrap := True;
+  WizardForm.StatusLabel.AdjustHeight();
+end;
+
+function GetNodeVersionMain(Param: string): string;
+begin
+
+  debug('gnv: ' + Param);
+
+  if Param = 'current' then
+    Result := main.node.current;
+
+  if Param = 'selected' then
+    Result := main.node.selected;
+
+  debug('gnv: ' + Result);
+
+end;
+
+function GetInstalledNodeGUID(nv: string): string;
+var
+  _base: string;
+  _keys: TArrayOfString;
+  i, ii: integer;
+  _name: string;
+  _nv: string;
+
+begin
+  _base := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall';
+  Result := '';
+
+  if Length(nv) < 1 then nv := main.node.current;
+
+  if RegGetSubkeyNames(main.HKLM, _base, _keys) then begin
+    for i:= 0 to GetArrayLength(_keys) - 1 do begin
+      if RegQueryStringValue(main.HKLM, _base + '\' + _keys[i], 'DisplayName', _name) = True then begin
+        if _name = 'Node.js' then begin
+          if RegQueryStringValue(main.HKLM, _base + '\' + _keys[i], 'DisplayVersion', _nv) = True then begin
+            if _nv = nv then begin
+              Result := _keys[i];
+              break;
+            end;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+end;
+
+
+{
+// Check function to indicate if Node.js is currently installed
+// mode = silent: Return true only when 'Run in Background' was selected
+// mode = show; Return true only when 'Run in Background' was *NOT* selected
+function CheckNodeInstall(mode: string): Boolean;
+begin
+  if main.error.status then Exit;
+  // Result := (Length(main.node.selected) > 0) and (main.node.selected <> main.node.current);
+  // We offer to re-install the current version!
+  Result := Length(main.node.selected) > 0;
+
+  if mode = 'silent' then
+    Result := Result and main.node.run_silent;
+
+  if mode = 'show' then 
+    Result := Result and (not main.node.run_silent);
+
+end;
+}
+
+
+
+// Each parameter MUST be string, integer or boolean.
+// No SET type allowed here :(( !
+function RunCheck(step, param: string): Boolean;
+var
+  bool: boolean;
+  i: integer;
+  str: string;
+  _kind: sREDInstallationKind;
+
+begin
+  if main.error.status then Exit;
+
+  if step = 'rcsNodeUninstall' then begin
+    // We uninstall only if we shall install as well.
+    if RunCheck('rcsNodeInstall', '') then
+      Result := Length(GetInstalledNodeGUID(main.node.current)) > 0;
+  end;
+
+  if step = 'rcsNodeInstall' then begin
+    Result := Length(main.node.selected) > 0;
+    if param = 'silent' then
+    // Return true only when 'Run in Background' was selected
+      Result := Result and main.node.run_silent;
+    if param = 'show' then
+    // Return true only when 'Run in Background' was *NOT* selected
+      Result := Result and (not main.node.run_silent);
+  end;
+
+  if step = 'rcsPython' then begin
+    if not main.node.run_silent then Exit;
+    if not main.node.install_tools then Exit;
+    bool := StrToBool(param);
+    if bool then begin
+      Result := Length(main.python.path) > 0;
+    end else begin
+      Result := Length(main.python.path) = 0;
+    end;
+  end;
+
+  if step = 'rcsVSBuildTools' then begin
+    if not main.node.run_silent then Exit;
+    if not main.node.install_tools then Exit;
+    Result := Length(main.vs.version) = 0;
+  end;
+
+  if step = 'rcsPythonConfig' then begin
+    if main.python.npm then Exit;
+    Result := RunCheck('rcsPython', 'yes');
+  end;
+
+  if step = 'rcsREDRemove' then begin
+    i := StrToIntDef(param, -1);
+    if i < 0 then Exit;
+    if not (i < GetArrayLength(main.red.installs)) then Exit;
+    _kind := main.red.installs[i].kind;
+    if _kind = rikVoid then Exit;
+    if _kind = rikNew then Exit;
+    Result := Length(main.red.installs[i].action) > 0;
+  end;
+
+  if step = 'rcsREDInstall' then begin
+    i := StrToIntDef(param, -1);
+    if i < 0 then Exit;
+    if i < GetArrayLength(main.red.installs) then begin
+      if main.red.installs[i].kind = rikVoid then Exit;
+      str := main.red.installs[i].action;
+      if LowerCase(str) = 'remove' then Exit;
+      Result := Length(str) > 0;
+    end;
+  end;
+
+end;
+
+{
+// Check function to indicate if Node.js is currently installed and shall be uninstalled
+function CheckNodeUninstall(): Boolean;
+begin
+  if main.error.status then Exit;
+  if CheckNodeInstall('') then 
+    Result := Length(GetInstalledNodeGUID(main.node.current)) > 0;
+end;
+}
+
+function GetNodeVersionCall(msg: string): string;
+var
+  _page: TOutputMarqueeProgressWizardPage;
+  res: array of string;
+  i: integer;
+  _nv: string;
+
+begin
+
+  Result := '';
+    _page := CreateOutputMarqueeProgressPage('Verifying Node.js installation', msg);
+
+    try
+      _page.Show();
+
+      RunCMD('node --version', '', res);
+      if GetArrayLength(res) = 1 then begin
+        _nv := res[0];
+        if StringChangeEx(_nv, 'v', '', True) = 1 then begin
+          Result := _nv;
+        end;
+      end;
+
+    finally
+      _page.Hide();
+    end;
+end;
+
+{
+function GetNodeVersionReg(): string;
+var
+  _nv: string;
+begin
+  Result := ''
+  if RegKeyExists(main.HKLM, 'SOFTWARE\Node.js') then begin
+    if RegQueryStringValue(main.HKLM, 'SOFTWARE\Node.js', 'Version', _nv) = True then begin
+      Result := _nv;
+    end;
+  end;
+end;
+}
+
+function GetNodeDataReg(param: string): string;
+var
+  _data: string;
+  _key: string;
+begin
+  Result := ''
+
+  param := LowerCase(param);
+  if param = 'version' then begin
+    _key := 'Version'
+  end else if param = 'path' then begin
+    _key := 'InstallPath'
+  end else begin
+    Exit;
+  end;
+
+  if RegKeyExists(main.HKLM, 'SOFTWARE\Node.js') then begin
+    if RegQueryStringValue(main.HKLM, 'SOFTWARE\Node.js', _key, _data) = True then begin
+      Result := _data;
+    end;
+  end;
+end;
+
+
+// Each parameter MUST be string, integer or boolean.
+// No SET type allowed here :(( !
+procedure Confirm(step, param: string);
+var
+  _nvC: string;
+  _nvR: string;
+  check: boolean;
+  _pyp: string;
+  _vs: string;
+
+begin
+
+  if step = 'csNoNode' then begin
+    _nvC := GetNodeVersionCall('Verifying that Node.js is not installed.');
+    _nvR := GetNodeDataReg('version');
+
+    if (Length(_nvC) > 0) or (Length(_nvR) > 0) then begin
+      main.error.msg := 'Detected Node.js despite it should have been removed.';
+    end;
+  end;
+
+  if step = 'csNode' then begin
+    _nvC := GetNodeVersionCall('Verifying that Node.js is not installed.');
+    _nvR := GetNodeDataReg('version');
+
+    if not ((param = _nvC) and (_nvC = _nvR)) then begin
+      main.error.msg := 'Failed to confirm that Node.js v' + param + ' is installed.'
+    end;
+  end;
+
+  if step = 'csFile' then begin
+    if not FileExists(param) then begin
+      main.error.msg := 'File not found: ' + param;
+    end;
+  end;
+
+  if step = 'csPython' then begin
+    _pyp := GetPythonPath('');
+    if Length(_pyp) < 1 then begin
+      main.error.msg := 'Failed to confirm that Python is installed.'
+    end else begin
+      main.python.path := _pyp;
+    end;
+  end;
+
+  if step = 'csVSBuildTools' then begin
+    _vs := GetVSBuildToolsVersion();
+    if Length(_vs) < 1 then begin
+      main.error.msg := 'Failed to confirm that the VisualStudio BuildTools are installed.'
+    end else begin
+      main.vs.version := _vs;
+    end;
+  end;
+  
+  if step = 'csPythonConfig' then begin
+    _pyp := GetNPMPythonConfig();
+    if Length(_pyp) < 1 then begin
+      main.error.msg := 'Failed to configure Node.js to know the Python path.'
+    end;
+  end;
+
+  if Length(main.error.msg) > 0 then
+    main.error.status := True;
+
+end;
+
+{
+procedure ConfirmNoNode();
+var
+  _nvC: string;
+  _nvR: string;
+
+begin
+  _nvC := GetNodeVersionCall('Verifying that Node.js is not installed.');
+  _nvR := GetNodeVersionReg();
+
+  if (Length(_nvC) > 0) or (Length(_nvR) > 0) then begin
+    main.error.status := True;
+    main.error.msg := 'Detected Node.js despite it should have been removed.';
+  end;
+end;
+
+
+procedure ConfirmNode(nv: string);
+var
+  _nvC: string;
+  _nvR: string;
+
+begin
+  _nvC := GetNodeVersionCall('Looking for Node.js v' + nv);
+  _nvR := GetNodeVersionReg();
+
+  if not ((_nvC = nv) and (_nvC = _nvR)) then begin
+    main.error.status := True;
+    main.error.msg := 'Failed to confirm that Node.js v' + nv + ' is installed.'
+  end;
+end;
+}
+
+function GetNodeInstallSilent(param: string): string;
+begin
+  if main.node.run_silent then Result := '/qn';
+end;
+
+function GetREDActionData(data: string; index: integer): string;
+var
+  p: string;
+
+begin
+
+  debug('GetREDActionData: ' + data + ' / ' + IntToStr(index));
+  
+  if index < 0 then Exit;
+  if not (index < GetArrayLength(main.red.installs)) then Exit;
+
+  if data = 'global' then begin
+    // Explicitely - for an existing installation
+    if main.red.installs[index].kind = rikGlobal then Result := '-g';
+    // implicitey - for a new installation
+    if Length(GetREDActionData('path', index)) < 1 then Result := '-g';
+
+  end;
+
+  if data = 'version' then Result := main.red.installs[index].version;
+  if data = 'action' then Result := main.red.installs[index].action;
+
+  if data = 'path' then begin
+    // For new installations, the path was calculated.
+    p := main.red.installs[index].calc.path;
+    // In case this is an already existing installation
+    // a new path will only be calculated if there was an issue with the given one.
+    if main.red.installs[index].kind = rikPath then begin
+      // if no path was calculated, take the given!
+      if Length(p) < 1 then 
+        p := main.red.installs[index].path;
+    end;
+    Result := p;
+
+    debug('GetREDActionData: path / ' + p);
+  end;
+
+  if data = 'action' then Result := main.red.installs[index].action;
+
+end;
+
+function GetREDActionGlobal(param: string): string;
+begin
+  Result := GetREDActionData('global', StrToIntDef(param, -1));
+end;
+
+function GetREDActionVersion(param: string): string;
+begin
+  Result := GetREDActionData('version', StrToIntDef(param, -1));
+end;
+
+function GetREDActionAction(param: string): string;
+begin
+  Result := GetREDActionData('action', StrToIntDef(param, -1));
+end;
+
+function GetREDActionPath(param: string): string;
+begin
+  Result := GetREDActionData('path', StrToIntDef(param, -1));
+end;
+
+function GetREDCurrentMsg(param: string): string;
+var
+  _rv: string;
+  _path: string;
+  i: integer;
+
+begin
+  i := StrToIntDef(param, -1);
+  if i < 0 then begin
+    Result := 'GetREDCurrentMsg / ERROR: ' + param;
+    Exit;
+  end;
+
+  _rv := GetREDActionData('version', i);
+  _path := GetREDActionData('path', i);
+
+  if Length(_path) < 1 then begin
+    Result := 'globally installed Node-RED v' + _rv;
+  end else begin
+    Result := 'Node-RED v' + _rv + ' @ ' + _path;
+  end;
+
+end;
+
+function GetREDActionMsg(param: string): string;
+var
+  _rv: string;
+  _path: string;
+  i: integer;
+
+begin
+  i := StrToIntDef(param, -1);
+  if i < 0 then begin
+    Result := 'GetREDActionMsg / ERROR: ' + param;
+    Exit;
+  end;
+
+  _rv := GetREDActionData('action', i);
+  _path := GetREDActionData('path', i);
+
+  if Length(_path) < 1 then begin
+    Result := 'globally installed Node-RED v' + _rv;
+  end else begin
+    Result := 'Node-RED v' + _rv + ' @ ' + _path;
+  end;
+
+end;
+
+
+procedure REDPrepare(param: string);
+var
+  _path: string;
+  _pkg: string;
+  // _json: TJsonParser;
+  // _json: string;
+  index: integer;
+  _kind: sREDInstallationKind;
+
+begin
+
+  // We have no option to cancel the installation (step) at this stage.
+  // Thus even if we know there's something wrong, we need to accept the incoming impact. 
+  if main.error.status then Exit;
+  index := StrToIntDef(param, -1);
+  if index < 0 then Exit;
+  if not (index < GetArrayLength(main.red.installs)) then Exit;
+
+  _kind := main.red.installs[index].kind;
+  if _kind = rikVoid then Exit;
+
+  _path := GetREDActionData('path', index);
+  if Length(_path) < 1 then Exit;
+
+  if not DirExists(_path) then begin
+    debug('Creating Node-RED installation directory @ ' + _path);
+    if not CreateDir(_path) then Exit;    // this will create troubles...
+  end;
+
+  _pkg := _path + '\package.json';
+  if not FileExists(_pkg) then begin
+    debug('Creating minimal package.json @ ' + _pkg);
+    SaveStringToFile(_pkg, '{}' + #13#10, False);  // no need to check for success here...
+  end;
+
+  SetupRunConfig();
+
+end;
+
+
+procedure REDFinalize(param: string);
+var
+  _action: string;
+  _path: string;
+  _key: string;
+  i: integer;
+  k, p: string;
+  _root: string;
+  error: boolean;
+  _rv: string;
+  res: array of string;
+  index: integer;
+  _kind: sREDInstallationKind;
+
+begin
+
+  if main.error.status then Exit;
+  index := StrToIntDef(param, -1);
+  if index < 0 then Exit;
+  if not (index < GetArrayLength(main.red.installs)) then Exit;
+
+  _kind := main.red.installs[index].kind;
+  if _kind = rikVoid then Exit;
+
+  _action := main.red.installs[index].action;
+  if Length(_action) < 1 then Exit;
+  if LowerCase(_action) = 'remove' then Exit;
+
+  // First: Let's confirm that there's 
+  // > a NR installation
+  // > with the correct version 
+  // > @ the requested path (or globally!)
+
+  _path := GetREDActionData('path', index);
+
+  p := _path;
+  if Length(_path) < 1 then begin
+
+    // Get the details of the global installation
+    SetArrayLength(res, 0);
+    if RunCMD('npm config get prefix', '', res) then begin
+      if GetArrayLength(res) > 0 then p := res[0];
+    end;
+  end;
+
+  _rv := red_list(p);
+  main.error.status := True;
+  if Length(_rv) > 0 then begin
+    if main.red.installs[index].action = _rv then begin
+      main.error.status := False;
+    end;
+  end;
+  
+  if main.error.status then begin
+      main.error.msg := 'Failed to confirm that installation of ' + GetREDActionMsg(IntToStr(index)) + ' was successful.';
+      _path := '';
+  end;
+
+  if Length(_path) < 1 then Exit;
+
+  // Next: Bookkeeping in the registry!
+  _key := main.red.installs[index].key;
+  if Length(_key) < 1 then begin
+    
+    _root := '{#REDInstallationsRegRoot}';
+    i := 0;
+    repeat
+      i := i + 1;
+      k := '0000' + IntToStr(i);
+      // Pascal Script strings begin with index '1'!
+      _key := _root + '\' + Copy(k, Length(k) - 3, 4);
+    until (RegKeyExists(main.HKLM, _key) xor (i < 10000));   // True if False!!
+
+    // I'm aware that this will 'break' if 10.000+ keys are present!
+    
+  end;
+  
+  error := False;
+  if not RegWriteStringValue(main.HKLM, _key, 'Path', _path) then error := True;
+  
+  // Additional properties follow
+  if not RegWriteStringValue(main.HKLM, _key, 'Name', main.red.installs[index].name) then error := True;
+
+  if error then begin
+    main.error.status := True;
+    main.error.msg := 'Failed to create registry enties for Node-RED installation @ ' + _path;
+  end;
+
+end;
+
+
+procedure REDRemove(param: string);
+var
+  _path, p: string;
+  res: array of string;
+  _rv: string;
+  index: integer;
+  _kind: sREDInstallationKind;
+
+begin
+
+  if main.error.status then Exit;
+  index := StrToIntDef(param, -1);
+  if index < 0 then Exit;
+  if not (index < GetArrayLength(main.red.installs)) then Exit;
+
+  _kind := main.red.installs[index].kind;
+  if _kind = rikVoid then Exit;
+
+  // Let's ensure that there is NO Node-RED installation at the given path (or globally)!
+  _path := GetREDActionData('path', index);
+
+  p := _path;
+  if Length(_path) < 1 then begin
+    SetArrayLength(res, 0);
+    if RunCMD('npm config get prefix', '', res) then begin
+      if GetArrayLength(res) > 0 then p := res[0];
+    end;
+  end;
+
+  if Length(p) < 1 then begin
+    main.error.status := True;
+    main.error.msg := 'Failed to get path to check for presence of Node-RED installation.';
+    Exit;
+  end;
+  
+  _rv := red_list(p);
+  if Length(_rv) > 0 then begin
+    main.error.status := True;
+    main.error.msg := 'Failed to confirm the removal of ' +  GetREDCurrentMsg(IntToStr(index)) + '.';
+  end;
+
+  // We do not remove the Registry entries here!
+  // Once the installer runs another time, it will detect any obsolete entries & remove those then.
+  // This allows us to keep the sequence (in the registry) for this run - without puzzling around.
+
 end;
 
 

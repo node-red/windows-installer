@@ -85,12 +85,14 @@ var
 
   _path: string;
   check: boolean;
+  _key: string;
 
+  _data: string;
 begin
 
   Result := 0;
 
-  regKey := 'SOFTWARE\Node-RED\installations'
+  regKey := '{#REDInstallationsRegRoot}'
 
   // check registry for node-RED key
   // enumerate registered installations
@@ -102,7 +104,8 @@ begin
     if RegGetSubkeyNames(main.HKLM, regKey, installs) then begin
       for i:=0 to GetArrayLength(installs) - 1 do begin
         check := False;
-        if RegQueryStringValue(main.HKLM, regKey + '\' + installs[i], 'Path', _path) = True then begin
+        _key := regKey + '\' + installs[i];
+        if RegQueryStringValue(main.HKLM, _key, 'Path', _path) = True then begin
           page.SetText('Verifying Node-RED installation path: ' + _path, '');
           if DirExists(_path) then begin
             rv := red_list(_path);
@@ -111,20 +114,20 @@ begin
               having:= GetArrayLength(main.red.installs);
               SetArrayLength(main.red.installs, having+1);
               with main.red.installs[having] do begin
+                key := _key;
                 kind := rikPath;
                 version := rv;
                 path := _path;
                 id := TObject.Create;
               end;
+
+              // Additional Data
+              if RegQueryStringValue(main.HKLM, _key, 'Name', _data) = True then 
+                main.red.installs[having].name := _data;
+
               having:= GetArrayLength(main.red.installs);
               Result := Result + 1;
               check := True;
-
-
-              // We should either get some more details here 
-              // from a package.json or from the registry
-
-
             end;
           end;
         end;
