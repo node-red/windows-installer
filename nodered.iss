@@ -77,6 +77,9 @@
 ; 15 = 2015
 #define VSBuildToolsMinVersion ReadIni(INIFile, "vs", "min", '15')
 
+; URL to download vswhere from
+#define VSWhereURL ReadIni(INIFILE, "vs", "where")
+
 #define MyAppName "Node-RED"
 #define MyAppVersion "> 3.0"
 #define MyAppPublisher "The Node-RED community"
@@ -128,7 +131,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "graphics\nodejs.bmp"; DestDir: "{tmp}"; DestName: "nodejs.bmp"; Flags: dontcopy
 Source: "graphics\nrhex24.bmp"; DestDir: "{tmp}"; DestName: "node-red.bmp"; Flags: dontcopy
 Source: "graphics\node-red-icon-small.bmp"; DestDir: "{tmp}"; DestName: "node-red-small.bmp"; Flags: dontcopy
-Source: "tools\vswhere.exe"; DestDir: "{tmp}"; DestName: "vswhere.exe"
+; Source: "tools\vswhere.exe"; DestDir: "{tmp}"; DestName: "vswhere.exe"
 Source: "bat\setup_loop.bat"; DestDir: "{tmp}"
 
 [Icons]
@@ -1455,7 +1458,7 @@ begin
       main.python.path := GetPythonPath('');
 
     _ppage.SetText('Verifying the VisualStudio BuildTools setup...', '');
-    if not FileExists(ExpandConstant('{tmp}\vswhere.exe')) then ExtractTemporaryFile('vswhere.exe');
+    // if not FileExists(ExpandConstant('{tmp}\vswhere.exe')) then ExtractTemporaryFile('vswhere.exe');
 
     // Check if vswhere is able to find an installation
     main.vs.version := GetVSBuildToolsVersion();
@@ -1632,6 +1635,7 @@ begin
 
     check := FileExists(ExpandConstant('{tmp}\{#NodeLicenseTmpFileName}'));
     check := FileExists(ExpandConstant('{tmp}\{#REDLicenseTmpFileName}')) and check;
+    check := FileExists(ExpandConstant('{tmp}\vswhere.exe')) and check;
 
     having := GetArrayLength(main.node.versions);
     if having > 0 then begin
@@ -1654,6 +1658,7 @@ begin
 
       _dp.Add('{#NodeLicenseURL}', '{#NodeLicenseTmpFileName}', '');
       _dp.Add('{#REDLicenseURL}', '{#REDLicenseTmpFileName}', '');
+      _dp.Add('{#VSWhereURL}', 'vswhere.exe', '');
 
       // to run the backup option if npm is not present
       _dp.Add('https://github.com/node-red/node-red/releases/latest', '{#REDLatestTmpFileName}', '');
