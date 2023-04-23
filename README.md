@@ -1,7 +1,7 @@
 # node-red-windows-installer
 The Node-RED installer for Windows
 
-Current state: UI Test possible...
+Current state: **Beta** stage - Installation of Node.js, Python, VS BuildTools & Node-RED possible.
 
 <img src="documentation/preview.png"  width="66%" height="66%">
 
