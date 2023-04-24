@@ -262,8 +262,18 @@ Filename: "{tmp}\setup_loop.bat"; \
     AfterInstall: REDFinalize('{#i}');
 #endsub
 
+#sub NPMRebuild
+  Filename: "npm"; \
+    Parameters: "rebuild"; \
+    WorkingDir: "{code:GetREDActionPath|{#i}}"; \
+    Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+    StatusMsg: "Rebuilding packages for {code:GetREDActionMsg|{#i}}..."; \
+    Check: RunCheck('rcsREDInstall', '{#i}');
+#endsub
+
 #for {i = 0; i < Int(REDProvisionCount, 5); i++} RemoveRED
 #for {i = 0; i < Int(REDProvisionCount, 5); i++} InstallRED
+#for {i = 0; i < Int(REDProvisionCount, 5); i++} NPMRebuild
 
 #undef i
 
