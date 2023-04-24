@@ -30,6 +30,8 @@
 
 #define INIFile RemoveBackslash(SourcePath) + "\setup.ini"
 
+#define VersionInfoURL ReadIni(INIFile, "installer", "url", "https://nodered.org")
+
 ; Node.js Default Version - that we propose to install if none is present
 #define NodeVersionRecommended ReadIni(INIFile, "node", "recommended")
 
@@ -147,6 +149,9 @@ english.WelcomeLabel2=This will install Node-RED on your computer.%n%nInitially 
 WizardReady=Final verification
 ReadyLabel1=We just ran a final verification of your installation setup.
 FinishedHeadingLabel=Completing the%n[name] Setup Wizard
+TranslatorNote={#ReadIni(INIFile, "installer", "description", "")}%nVersion {#ReadIni(INIFile, "installer", "version", "")}%nCopyright © {#ReadIni(INIFile, "installer", "copyright", "")}%n{#VersionInfoURL}
+AboutSetupMenuItem=&About...
+AboutSetupTitle=About {#ReadIni(INIFile, "installer", "description", "")}
 
 [CustomMessages]
 english.MSG_FAILED_FINISHED1=Setup failed to install Node-RED on your computer:
