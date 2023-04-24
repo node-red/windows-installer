@@ -368,6 +368,7 @@ type
     items: array of rREDListItem;
     npm: boolean;
     error: boolean;
+    run: array of integer;    // index sequence of 'installs' to be installed. This eliminates the installs of 'rikVoid'. Populated @ UpdateReadyMemo. 
   end;
 
   // TREDTargetObject = record
@@ -1912,11 +1913,17 @@ begin
   m:= m + '******************' + NewLine;
   m:= m + '***  Node-RED  ***' + NewLine;
 
+  SetArrayLength(main.red.run, GetArrayLength(main.red.installs));
+
   l:=0;
   for i:= 0 to GetArrayLength(main.red.installs) - 1 do begin
-    if main.red.installs[i].kind <> rikVoid then
+    if main.red.installs[i].kind <> rikVoid then begin
+      main.red.run[l] := i;
       l:= l + 1;
+    end;
   end;
+
+  SetArrayLength(main.red.run, l);
 
   _global:= False;
   tag := 0;
@@ -2401,7 +2408,8 @@ begin
   if step = 'rcsREDRemove' then begin
     i := StrToIntDef(param, -1);
     if i < 0 then Exit;
-    if not (i < GetArrayLength(main.red.installs)) then Exit;
+    if not (i < GetArrayLength(main.red.run)) then Exit;
+    i := main.red.run[i];
     _kind := main.red.installs[i].kind;
     if _kind = rikVoid then Exit;
     if _kind = rikNew then Exit;
@@ -2411,12 +2419,12 @@ begin
   if step = 'rcsREDInstall' then begin
     i := StrToIntDef(param, -1);
     if i < 0 then Exit;
-    if i < GetArrayLength(main.red.installs) then begin
-      if main.red.installs[i].kind = rikVoid then Exit;
-      str := main.red.installs[i].action;
-      if LowerCase(str) = 'remove' then Exit;
-      Result := Length(str) > 0;
-    end;
+    if not (i < GetArrayLength(main.red.run)) then Exit;
+    i := main.red.run[i];
+    if main.red.installs[i].kind = rikVoid then Exit;
+    str := main.red.installs[i].action;
+    if LowerCase(str) = 'remove' then Exit;
+    Result := Length(str) > 0;
   end;
 
 end;
@@ -2610,7 +2618,8 @@ begin
   debug('GetREDActionData: ' + data + ' / ' + IntToStr(index));
   
   if index < 0 then Exit;
-  if not (index < GetArrayLength(main.red.installs)) then Exit;
+  if not (index < GetArrayLength(main.red.run)) then Exit;
+  index := main.red.run[index];
 
   if data = 'global' then begin
     // Explicitely - for an existing installation
@@ -2727,7 +2736,8 @@ begin
   if main.error.status then Exit;
   index := StrToIntDef(param, -1);
   if index < 0 then Exit;
-  if not (index < GetArrayLength(main.red.installs)) then Exit;
+  if not (index < GetArrayLength(main.red.run)) then Exit;
+  index := main.red.run[index];
 
   _kind := main.red.installs[index].kind;
   if _kind = rikVoid then Exit;
@@ -2770,7 +2780,8 @@ begin
   if main.error.status then Exit;
   index := StrToIntDef(param, -1);
   if index < 0 then Exit;
-  if not (index < GetArrayLength(main.red.installs)) then Exit;
+  if not (index < GetArrayLength(main.red.run)) then Exit;
+  index := main.red.run[index];
 
   _kind := main.red.installs[index].kind;
   if _kind = rikVoid then Exit;
@@ -2855,7 +2866,8 @@ begin
   if main.error.status then Exit;
   index := StrToIntDef(param, -1);
   if index < 0 then Exit;
-  if not (index < GetArrayLength(main.red.installs)) then Exit;
+  if not (index < GetArrayLength(main.red.run)) then Exit;
+  index := main.red.run[index];
 
   _kind := main.red.installs[index].kind;
   if _kind = rikVoid then Exit;
