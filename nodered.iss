@@ -2609,23 +2609,22 @@ begin
   if main.node.run_silent then Result := '/qn';
 end;
 
-function GetREDActionData(data: string; index: integer): string;
+function GetREDInstallsData(data: string; index: integer): string;
 var
   p: string;
 
 begin
 
-  debug('GetREDActionData: ' + data + ' / ' + IntToStr(index));
+  debug('GetREDInstallsData: ' + data + ' / ' + IntToStr(index));
   
   if index < 0 then Exit;
-  if not (index < GetArrayLength(main.red.run)) then Exit;
-  index := main.red.run[index];
+  if not (index < GetArrayLength(main.red.installs)) then Exit;
 
   if data = 'global' then begin
     // Explicitely - for an existing installation
     if main.red.installs[index].kind = rikGlobal then Result := '-g';
     // implicitey - for a new installation
-    if Length(GetREDActionData('path', index)) < 1 then Result := '-g';
+    if Length(GetREDInstallsData('path', index)) < 1 then Result := '-g';
 
   end;
 
@@ -2651,24 +2650,32 @@ begin
 
 end;
 
+// This functoin translates between the main.red.run index & the main.red.installs index
+function GetREDRunData(data: string; index: integer): string;
+begin
+  if index < 0 then Exit;
+  if not (index < GetArrayLength(main.red.run)) then Exit;
+  Result := GetREDInstallsData(data, main.red.run[index]);
+end;
+
 function GetREDActionGlobal(param: string): string;
 begin
-  Result := GetREDActionData('global', StrToIntDef(param, -1));
+  Result := GetREDRunData('global', StrToIntDef(param, -1));
 end;
 
 function GetREDActionVersion(param: string): string;
 begin
-  Result := GetREDActionData('version', StrToIntDef(param, -1));
+  Result := GetREDRunData('version', StrToIntDef(param, -1));
 end;
 
 function GetREDActionAction(param: string): string;
 begin
-  Result := GetREDActionData('action', StrToIntDef(param, -1));
+  Result := GetREDRunData('action', StrToIntDef(param, -1));
 end;
 
 function GetREDActionPath(param: string): string;
 begin
-  Result := GetREDActionData('path', StrToIntDef(param, -1));
+  Result := GetREDRunData('path', StrToIntDef(param, -1));
 end;
 
 function GetREDCurrentMsg(param: string): string;
@@ -2684,8 +2691,8 @@ begin
     Exit;
   end;
 
-  _rv := GetREDActionData('version', i);
-  _path := GetREDActionData('path', i);
+  _rv := GetREDRunData('version', i);
+  _path := GetREDRunData('path', i);
 
   if Length(_path) < 1 then begin
     Result := 'globally installed Node-RED v' + _rv;
@@ -2708,8 +2715,8 @@ begin
     Exit;
   end;
 
-  _rv := GetREDActionData('action', i);
-  _path := GetREDActionData('path', i);
+  _rv := GetREDRunData('action', i);
+  _path := GetREDRunData('path', i);
 
   if Length(_path) < 1 then begin
     Result := 'globally installed Node-RED v' + _rv;
@@ -2742,7 +2749,7 @@ begin
   _kind := main.red.installs[index].kind;
   if _kind = rikVoid then Exit;
 
-  _path := GetREDActionData('path', index);
+  _path := GetREDInstallsData('path', index);
   if Length(_path) < 1 then Exit;
 
   if not DirExists(_path) then begin
@@ -2795,7 +2802,7 @@ begin
   // > with the correct version 
   // > @ the requested path (or globally!)
 
-  _path := GetREDActionData('path', index);
+  _path := GetREDInstallsData('path', index);
 
   p := _path;
   if Length(_path) < 1 then begin
@@ -2816,7 +2823,7 @@ begin
   end;
   
   if main.error.status then begin
-      main.error.msg := 'Failed to confirm that installation of ' + GetREDActionMsg(IntToStr(index)) + ' was successful.';
+      main.error.msg := 'Failed to confirm that installation of ' + GetREDActionMsg(param) + ' was successful.';
       _path := '';
   end;
 
@@ -2873,7 +2880,7 @@ begin
   if _kind = rikVoid then Exit;
 
   // Let's ensure that there is NO Node-RED installation at the given path (or globally)!
-  _path := GetREDActionData('path', index);
+  _path := GetREDInstallsData('path', index);
 
   p := _path;
   if Length(_path) < 1 then begin
@@ -2892,7 +2899,7 @@ begin
   _rv := red_list(p);
   if Length(_rv) > 0 then begin
     main.error.status := True;
-    main.error.msg := 'Failed to confirm the removal of ' +  GetREDCurrentMsg(IntToStr(index)) + '.';
+    main.error.msg := 'Failed to confirm the removal of ' +  GetREDCurrentMsg(param) + '.';
   end;
 
   // We do not remove the Registry entries here!
