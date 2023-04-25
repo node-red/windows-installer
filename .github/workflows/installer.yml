@@ -15,6 +15,16 @@ jobs:
     - name: Run Inno Compiler
       run: iscc "nodered.iss"
     
+    - name: CodeSign the installer 
+      uses: dlemstra/code-sign-action@v1
+      with:
+        certificate: '${{ secrets.CODE_SIGNING_CERTIFICATE }}'
+        password: '${{ secrets.CODE_SIGNING_CERTIFICATE_PASSWORD }}'
+        folder: 'Output'
+        recursive: false
+        files: |
+          Node-RED.Installer.exe
+
     - name: Upload files to a GitHub release
       uses: svenstaro/upload-release-action@2.5.0
       with:

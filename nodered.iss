@@ -121,6 +121,12 @@ WizardImageFile="graphics\sidebar\Node RED Side Graphic - BMP.bmp"
 LicenseFile="LICENSE"
 SetupIconFile={#SourcePath}\icons\node-red-icons.ico
 
+; Installer Code Signing Data
+; To create a test certificate: https://stackoverflow.com/questions/84847/how-do-i-create-a-self-signed-certificate-for-code-signing-on-windows
+; To create a Secure String: $xxx = ConvertTo-SecureString plain-text-string -asPlainText -force
+; to convert to Base64: certutil -encode .\ssCertInfo.pfx .\ssCertInfo.base64.txt
+; Action: https://github.com/dlemstra/code-sign-action
+
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
