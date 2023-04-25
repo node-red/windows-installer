@@ -149,7 +149,7 @@ english.WelcomeLabel2=This will install Node-RED on your computer.%n%nInitially 
 WizardReady=Final verification
 ReadyLabel1=We just ran a final verification of your installation setup.
 FinishedHeadingLabel=Completing the%n[name] Setup Wizard
-TranslatorNote={#ReadIni(INIFile, "installer", "description", "")}%nVersion {#ReadIni(INIFile, "installer", "version", "")}%nCopyright © {#ReadIni(INIFile, "installer", "copyright", "")}%n{#VersionInfoURL}
+TranslatorNote={#ReadIni(INIFile, "installer", "description", "")}%nVersion {#ReadIni(INIFile, "installer", "version", "")}%nCopyright ï¿½ {#ReadIni(INIFile, "installer", "copyright", "")}%n{#VersionInfoURL}
 AboutSetupMenuItem=&About...
 AboutSetupTitle=About {#ReadIni(INIFile, "installer", "description", "")}
 
@@ -284,7 +284,7 @@ Filename: "{tmp}\setup_loop.bat"; \
 
 
 
-#include <.\contrib\IDP_1.5.1\idp.iss>
+; #include <.\contrib\IDP_1.5.1\idp.iss>
 
 [Code]
 // #include <.\contrib\JsonParser.pas>
@@ -710,13 +710,19 @@ begin
 end;
 
 function BoolToStr(bool: boolean): string;
-// StrToBool is already defined in idp.iss ! 
 begin
   if bool then
     Result:='true'
   else
     Result :='false';
 end;
+
+function StrToBool(str: string): boolean;
+begin
+  Result := str = 'true'
+  Result := (str = 'yes') or Result;
+end;
+
 
 function isEmptyDir(dirName: String): Boolean;
 var
