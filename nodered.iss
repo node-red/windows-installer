@@ -1,4 +1,4 @@
-; *****
+﻿; *****
 ; * Windows Installer for Node-RED
 ; * Definition file for the Inno Setup compiler.
 ; * Copyright 2023 Ralph Wetzel
@@ -1858,10 +1858,7 @@ begin
     wf.ReadyMemo.Font.Style := [fsBold];
     wf.ReadyMemo.ScrollBars := ssVertical;
 
-    if main.red.error then begin
-      wf.NextButton.Enabled := False;
-      debug('wpReady: error');
-    end;
+    wf.NextButton.Enabled := not main.red.error;
 
   end;
 
@@ -2089,10 +2086,7 @@ begin
 
   end;
 
-  if _error then begin
-    debug('_error');
-    main.red.error := True;
-  end;
+  main.red.error := _error;
 
 {
   // UI Test only!
