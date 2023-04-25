@@ -1,4 +1,4 @@
-﻿; *****
+; *****
 ; * Windows Installer for Node-RED
 ; * Definition file for the Inno Setup compiler.
 ; * Copyright 2023 Ralph Wetzel
@@ -1968,7 +1968,15 @@ begin
     if main.red.installs[i].action = 'remove' then begin
       m:= m + 'This installation will be REMOVED!' + NewLine;
     end else if Length(main.red.installs[i].action) < 1 then begin
-      // ??
+      if ((_kind = rikGlobal) or (Length(main.red.installs[i].path) < 1)) then begin
+        m:= m + '+ Global installation.' + NewLine;
+        if not _global then begin
+          _global := True;
+        end else begin
+          m:= m + '  *** ERROR: Another global installation configured!' + NewLine;
+          _error := True;
+        end;
+      end;
     end else begin
 
       if c then begin
