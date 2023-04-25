@@ -17,6 +17,7 @@ jobs:
     
     - name: CodeSign the installer 
       uses: dlemstra/code-sign-action@v1
+      if: ${{ vars.SIGN_INSTALLER == 'TRUE' }}
       with:
         certificate: '${{ secrets.CODE_SIGNING_CERTIFICATE }}'
         password: '${{ secrets.CODE_SIGNING_CERTIFICATE_PASSWORD }}'
