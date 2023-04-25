@@ -1222,7 +1222,7 @@ begin
 
   end;
 
-  ii:= GetArrayLength(main.red.installs);
+  ii:= index + 1;
 
 // With those next lines, the number in the label of an installation
 // used to be calculated only based on the non-rikVoid entries.
