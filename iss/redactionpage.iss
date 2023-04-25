@@ -801,6 +801,13 @@ begin
   main.red.installs[_inst_index].kind := rikVoid;
   main.red.installs[_inst_index].id := nil;
 
+  _make_headline();
+  Exit;
+
+  // The next sequence used to change the labels of the listed installations
+  // to get a contious count without gaps.
+  // Kept here in case we think this creates a better user experience - sometimes in the future...
+
   ii:=0;
   for i:=0 to GetArrayLength(main.red.items) - 1 do begin
     if box.ItemLevel[i] = 0 then begin
@@ -816,10 +823,6 @@ begin
         if Length(_label) < 1 then
           _label := 'Node-RED';
 
-        // final corrections to the TREDInstallationAction(s)
-        // _action_items[i].target.line := i;
-        // _action_items[i].target.index := ii;
-
         box.ItemCaption[i] := '#' + IntToStr(ii + 1) + ': ' + _label;
         main.red.items[i].action := IntToStr(ii + 1);
 
@@ -828,12 +831,6 @@ begin
 
     end;
   end;
-
-{
-  for i:=0 to GetArrayLength(_action_items) - 1 do begin
-    debug(IntToStr(i) + ': ' + IntToStr(_action_items[i].target.index) + ' / ' + IntToStr(_action_items[i].target.line));
-  end;
-}
 
   _make_headline();
 
@@ -1225,12 +1222,22 @@ begin
 
   end;
 
+  ii:= GetArrayLength(main.red.installs);
+
+// With those next lines, the number in the label of an installation
+// used to be calculated only based on the non-rikVoid entries.
+// This created a continous count.
+// Commented as we think it's better when one installation keeps it's label number for the liefetime of an setup run.
+// Left here in if we change our mind at some point in time...
+
+{
   ii:=0;
   for i:=0 to index do begin
     if main.red.installs[i].kind <> rikVoid then begin
       ii:=ii+1;
     end;
   end;
+}
 
   _label := 'Node-RED';
   line := box.AddGroup('#' + IntToStr(ii) + ': ' + _label, '*', 0, nil);
