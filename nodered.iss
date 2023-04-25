@@ -1,4 +1,4 @@
-; *****
+﻿; *****
 ; * Windows Installer for Node-RED
 ; * Definition file for the Inno Setup compiler.
 ; * Copyright 2023 Ralph Wetzel
@@ -149,7 +149,7 @@ english.WelcomeLabel2=This will install Node-RED on your computer.%n%nInitially 
 WizardReady=Final verification
 ReadyLabel1=We just ran a final verification of your installation setup.
 FinishedHeadingLabel=Completing the%n[name] Setup Wizard
-TranslatorNote={#ReadIni(INIFile, "installer", "description", "")}%nVersion {#ReadIni(INIFile, "installer", "version", "")}%nCopyright � {#ReadIni(INIFile, "installer", "copyright", "")}%n{#VersionInfoURL}
+TranslatorNote={#ReadIni(INIFile, "installer", "description", "")}%nVersion {#ReadIni(INIFile, "installer", "version", "")}%nCopyright © {#ReadIni(INIFile, "installer", "copyright", "")}%nSide graphic by Marcus J. Davies%n{#VersionInfoURL}
 AboutSetupMenuItem=&About...
 AboutSetupTitle=About {#ReadIni(INIFile, "installer", "description", "")}
 
