@@ -72,11 +72,52 @@ function _add_installation(index: integer): Boolean; forward;
 function _add_new_installation(): Boolean; forward;
 procedure _make_headline(); forward;
 
+function _set_remove_button_state(index: integer): boolean;
+var
+  _remove: TNewButton;
+  // _state: boolean;
+  i, ii: integer;
+
+begin
+  _remove := TNewButton(main.pages.red_action.FindComponent('redaction_remove'));
+
+  Result := true;
+  if index < 0 then begin
+    index := main.pages.red_action.CheckListBox.ItemIndex;
+  end;
+
+  if not (index < 0) then begin
+    if index < GetArrayLength(main.red.items) then begin
+      Result := (GetREDInstallationIndex(main.red.items[index].link) >= 0);
+    end;
+  end;
+
+  // Check if there's more than 1 valid entry.
+  ii:=0;
+  for i:=0 to GetArrayLength(main.red.installs) -1 do begin
+    if main.red.installs[i].kind <> rikVoid then begin
+      index:=i;
+      ii:=ii+1;
+    end;
+  end;
+
+  // If so: In case it's only one entry: Enable only if this is not a rikNew installation!
+  if ii = 1 then begin
+    Result := (main.red.installs[index].kind <> rikNew) and Result;
+  end else begin
+    Result := (ii > 1) and Result;
+  end;
+
+  _remove.Enabled := Result;
+
+end;
+
+
 procedure _on_click(Sender: TObject);
 var
   index: integer;
   box: TNewCheckListBox;
-  _remove: TNewButton;
+  // _remove: TNewButton;
   k: sREDListItemKind;
   _inst_index: integer;
 
@@ -86,8 +127,9 @@ begin
 
   _clicked_line := index;
 
-  _remove := TNewButton(main.pages.red_action.FindComponent('redaction_remove'));
-  _remove.Enabled := (GetREDInstallationIndex(main.red.items[index].link) >= 0);
+  // _remove := TNewButton(main.pages.red_action.FindComponent('redaction_remove'));
+  // _remove.Enabled := (GetREDInstallationIndex(main.red.items[index].link) >= 0);
+  _set_remove_button_state(index);
 
   k := main.red.items[index].kind;
   _inst_index := GetREDInstallationIndex(main.red.items[index].link);
@@ -801,6 +843,7 @@ begin
   main.red.installs[_inst_index].kind := rikVoid;
   main.red.installs[_inst_index].id := nil;
 
+  _set_remove_button_state(-1);
   _make_headline();
   Exit;
 
@@ -1254,6 +1297,8 @@ begin
   end;
   line := _add_actions(box, main.red.installs[index], 1, True);
   line := _add_config(box, main.red.installs[index], 1, True);
+
+  _set_remove_button_state(-1);
 
 end;
 
