@@ -6,21 +6,6 @@
 ; * https://www.github.com/ralphwetzel/node-red-windows-installer
 ; *
 
-; *****
-; * This software uses the following 3rd party elements:
-; *
-
-;   JsonParser
-;   https://github.com/koldev/JsonParser
-;   This code is in the Public Domain. NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
-;   ./contrib/JsonParser.pas
-
-;   Inno Download Plugin
-;   Copyright (c) 2013-2015 Mitrich Software
-;   https://mitrichsoftware.wordpress.com/inno-setup-tools/inno-download-plugin/
-;   License zlib
-;   ./contrib/IDP_1.5.1
-
 
 ; *****
 ; * PreProcessor setup:
