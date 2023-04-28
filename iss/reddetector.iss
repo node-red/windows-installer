@@ -35,6 +35,27 @@ begin
 
 end;
 
+
+procedure query_registry(key: string; index: integer);
+var
+  data: string;
+
+begin
+
+  // Read additional data from registry
+  RegQueryStringValue(main.HKLM, key, 'Name', main.red.installs[index].name);
+  RegQueryStringValue(main.HKLM, key, 'Icon', main.red.installs[index].registry.icon);
+  RegQueryStringValue(main.HKLM, key, 'Autostart', main.red.installs[index].registry.autostart);
+
+  if RegQueryStringValue(main.HKLM, key, 'Port', data) = True then 
+    main.red.installs[index].port := StrToIntDef(data, 0);
+      
+  main.red.installs[index].icon := Length(main.red.installs[index].registry.icon) > 0;
+  main.red.installs[index].autostart := Length(main.red.installs[index].registry.autostart) > 0;
+
+end;
+
+
 function detect_global_red(var page: TOutputMarqueeProgressWizardPage): integer;
 var
   res: array of string;
@@ -43,9 +64,11 @@ var
   prefix: string;
   i: integer;
   _path: string;
-
+  _key: string;
 begin
 
+  _key := AddBackslash('{#REDInstallationsRegRoot}') + '0000';
+  
   Result := 0;
   // current_version := '';
   SetArrayLength(res, 0);
@@ -60,17 +83,22 @@ begin
         i:= GetArrayLength(main.red.installs);
         SetArrayLength(main.red.installs, i+1);
         with main.red.installs[i] do begin
+          key := _key;
           kind := rikGlobal;
           version := rv;
           path := _path;
           id := TObject.Create;
         end;
+
+        query_registry(_key, i);
+
         Result := 1;
       end;
     end;
   end;
 
 end;
+
 
 function detect_path_red(var page: TOutputMarqueeProgressWizardPage; path: string): integer;
 var
@@ -79,7 +107,7 @@ var
   tag, rv: string;
   i, having: integer;
 
-  installs: array of string;
+  _subkeys: array of string;
 
   regKey: string;
 
@@ -101,10 +129,14 @@ begin
 
   page.SetText('Querying registry for known Node-RED installations...','');
   if RegKeyExists(main.HKLM, regKey) then begin
-    if RegGetSubkeyNames(main.HKLM, regKey, installs) then begin
-      for i:=0 to GetArrayLength(installs) - 1 do begin
+    if RegGetSubkeyNames(main.HKLM, regKey, _subkeys) then begin
+      for i:=0 to GetArrayLength(_subkeys) - 1 do begin
+
+        // '0000' reserved for global installation
+        if StrToIntDef(_subkeys[i], -1) < 1 then continue;
+
         check := False;
-        _key := regKey + '\' + installs[i];
+        _key := regKey + '\' + _subkeys[i];
         if RegQueryStringValue(main.HKLM, _key, 'Path', _path) = True then begin
           page.SetText('Verifying Node-RED installation path: ' + _path, '');
           if DirExists(_path) then begin
@@ -122,17 +154,7 @@ begin
               end;
 
               // Additional Data
-              RegQueryStringValue(main.HKLM, _key, 'Name', main.red.installs[having].name);
-              // RegQueryStringValue(main.HKLM, _key, 'Port', main.red.installs[having].port);
-              RegQueryStringValue(main.HKLM, _key, 'Icon', main.red.installs[having].registry.icon);
-              RegQueryStringValue(main.HKLM, _key, 'Autostart', main.red.installs[having].registry.autostart);
-
-              if RegQueryStringValue(main.HKLM, _key, 'Port', _data) = True then 
-                main.red.installs[having].port := StrToIntDef(_data, 0);
-                
-              main.red.installs[having].icon := Length(main.red.installs[having].registry.icon) > 0;
-              main.red.installs[having].autostart := Length(main.red.installs[having].registry.autostart) > 0;
-
+              query_registry(_key, having);
 
               having:= GetArrayLength(main.red.installs);
               Result := Result + 1;
@@ -143,12 +165,13 @@ begin
 
          // no Node-RED installation in path!
         if not check then
-          RegDeleteKeyIncludingSubkeys(main.HKLM, regKey + '\' + installs[i])
+          RegDeleteKeyIncludingSubkeys(main.HKLM, regKey + '\' + _subkeys[i])
 
       end;
     end;
   end;
 end;
+
 
 function detect_red_installations(var page: TOutputMarqueeProgressWizardPage): integer;
 var

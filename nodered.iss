@@ -2769,27 +2769,33 @@ begin
   if _kind = rikVoid then Exit;
 
   _path := GetREDInstallsData('path', index);
-  if Length(_path) < 1 then Exit;
+  // if Length(_path) < 1 then Exit;
 
   // Start with Bookkeeping in the registry!
   // This ensures that - whatever happens - next time the installer runs we'll know where to look for a NR installation
   _key := main.red.installs[index].key;
   if Length(_key) < 1 then begin
-    
-    _root := '{#REDInstallationsRegRoot}';
-    i := 0;
-    repeat
-      i := i + 1;
-      k := '0000' + IntToStr(i);
-      // Pascal Script strings begin with index '1'!
-      _key := _root + '\' + Copy(k, Length(k) - 3, 4);
-    until (RegKeyExists(main.HKLM, _key) xor (i < 10000));   // True if False!!
 
-    // I'm aware that this will 'break' if 10.000+ keys are present!
-    main.red.installs[index].key := _key;  
+    _root := AddBackslash('{#REDInstallationsRegRoot}');
+
+    if main.red.installs[index].kind = rikGlobal then begin
+      _key := _root + '0000';
+
+    end else begin
+      i := 0;
+      repeat
+        i := i + 1;
+        k := '0000' + IntToStr(i);
+        // Pascal Script strings begin with index '1'!
+        _key := _root + '\' + Copy(k, Length(k) - 3, 4);
+      until (RegKeyExists(main.HKLM, _key) xor (i < 10000));   // True if False!!
+
+      // I'm aware that this will 'break' if 10.000+ keys are present!
+      main.red.installs[index].key := _key;
+    end;
+
   end;
   
-
   error := False;
   if not RegWriteStringValue(main.HKLM, _key, 'Path', _path) then error := True;
   
@@ -2799,16 +2805,20 @@ begin
 
   if error then debug('Failed to create registry enties for Node-RED installation @ ' + _path);
 
-  // Prepare the installation directory
-  if not DirExists(_path) then begin
-    debug('Creating Node-RED installation directory @ ' + _path);
-    if not CreateDir(_path) then Exit;    // this will create troubles...
-  end;
+  if Length(_path) > 0 then begin
+    
+    // Prepare the installation directory
+    if not DirExists(_path) then begin
+      debug('Creating Node-RED installation directory @ ' + _path);
+      if not CreateDir(_path) then Exit;    // this will create troubles...
+    end;
 
-  _pkg := _path + '\package.json';
-  if not FileExists(_pkg) then begin
-    debug('Creating minimal package.json @ ' + _pkg);
-    SaveStringToFile(_pkg, '{}' + #13#10, False);  // no need to check for success here...
+    _pkg := _path + '\package.json';
+    if not FileExists(_pkg) then begin
+      debug('Creating minimal package.json @ ' + _pkg);
+      SaveStringToFile(_pkg, '{}' + #13#10, False);  // no need to check for success here...
+    end;
+  
   end;
 
   SetupRunConfig();
