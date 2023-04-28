@@ -122,8 +122,17 @@ begin
               end;
 
               // Additional Data
-              if RegQueryStringValue(main.HKLM, _key, 'Name', _data) = True then 
-                main.red.installs[having].name := _data;
+              RegQueryStringValue(main.HKLM, _key, 'Name', main.red.installs[having].name);
+              // RegQueryStringValue(main.HKLM, _key, 'Port', main.red.installs[having].port);
+              RegQueryStringValue(main.HKLM, _key, 'Icon', main.red.installs[having].registry.icon);
+              RegQueryStringValue(main.HKLM, _key, 'Autostart', main.red.installs[having].registry.autostart);
+
+              if RegQueryStringValue(main.HKLM, _key, 'Port', _data) = True then 
+                main.red.installs[having].port := StrToIntDef(_data, 0);
+                
+              main.red.installs[having].icon := Length(main.red.installs[having].registry.icon) > 0;
+              main.red.installs[having].autostart := Length(main.red.installs[having].registry.autostart) > 0;
+
 
               having:= GetArrayLength(main.red.installs);
               Result := Result + 1;

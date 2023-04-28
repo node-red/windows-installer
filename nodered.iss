@@ -126,6 +126,7 @@ Source: "graphics\nrhex24.bmp"; DestDir: "{tmp}"; DestName: "node-red.bmp"; Flag
 Source: "graphics\node-red-icon-small.bmp"; DestDir: "{tmp}"; DestName: "node-red-small.bmp"; Flags: dontcopy
 ; Source: "tools\vswhere.exe"; DestDir: "{tmp}"; DestName: "vswhere.exe"
 Source: "bat\setup_loop.bat"; DestDir: "{tmp}"
+Source: "icons\node-red-icons.ico"; DestDir: "{app}"; DestName: "red.ico"
 
 [Icons]
 ; Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -320,6 +321,15 @@ type
     port: integer;
   end;
 
+  rREDRegData = record
+    name: string;
+    path: string;
+    version: string;
+    icon: string;
+    port: integer;
+    autostart: string;
+  end;
+
   sREDInstallationKind = (rikGlobal, rikPath, rikNew, rikVoid);
 
   rREDInstallation = record
@@ -337,6 +347,7 @@ type
     // final_path: string;
     calc: rREDCalcData;
     // add additional properties here!
+    registry: rREDRegData;
   end;
 
   // TREDAction = (raNone, raInstall, raRemove);
@@ -2740,6 +2751,10 @@ var
   index: integer;
   _kind: sREDInstallationKind;
 
+  _key, k, _root: string;
+  i: integer;
+  error: boolean;
+
 begin
 
   // We have no option to cancel the installation (step) at this stage.
@@ -2756,6 +2771,35 @@ begin
   _path := GetREDInstallsData('path', index);
   if Length(_path) < 1 then Exit;
 
+  // Start with Bookkeeping in the registry!
+  // This ensures that - whatever happens - next time the installer runs we'll know where to look for a NR installation
+  _key := main.red.installs[index].key;
+  if Length(_key) < 1 then begin
+    
+    _root := '{#REDInstallationsRegRoot}';
+    i := 0;
+    repeat
+      i := i + 1;
+      k := '0000' + IntToStr(i);
+      // Pascal Script strings begin with index '1'!
+      _key := _root + '\' + Copy(k, Length(k) - 3, 4);
+    until (RegKeyExists(main.HKLM, _key) xor (i < 10000));   // True if False!!
+
+    // I'm aware that this will 'break' if 10.000+ keys are present!
+    main.red.installs[index].key := _key;  
+  end;
+  
+
+  error := False;
+  if not RegWriteStringValue(main.HKLM, _key, 'Path', _path) then error := True;
+  
+  // Additional properties follow
+  if not RegWriteStringValue(main.HKLM, _key, 'Name', main.red.installs[index].name) then error := True;
+  if not RegWriteStringValue(main.HKLM, _key, 'Port', IntToStr(main.red.installs[index].port)) then error := True;
+
+  if error then debug('Failed to create registry enties for Node-RED installation @ ' + _path);
+
+  // Prepare the installation directory
   if not DirExists(_path) then begin
     debug('Creating Node-RED installation directory @ ' + _path);
     if not CreateDir(_path) then Exit;    // this will create troubles...
@@ -2772,6 +2816,60 @@ begin
 end;
 
 
+function CreateREDIcon(index: integer; path: string; folder: string): string;
+var
+  i: integer;
+  _name: string;
+  _port: string;
+  _run: string;
+  
+begin
+  i:=0;
+  repeat
+    _name := main.red.installs[index].name
+    if Length(_name) < 1 then _name := 'Node-RED';
+    if i > 0 then begin
+      _name := _name + '(' + IntToStr(i) + ')';
+    end;
+    _name := AddBackslash(folder) + _name + '.lnk';
+    i:=i+1;
+  until FileExists(_name) xor True;
+
+  if main.red.installs[index].port > 0 then
+    _port := ' --port ' + IntToStr(main.red.installs[index].port) + ' ';
+
+  // non-global install needs path to node.exe
+  if Length(path) > 0 then begin
+    _run := '"' + AddBackslash(GetNodeDataReg('path')) + 'node.exe"';
+    // _run := _run + ' node_modules\node-red\red.js';
+  end;
+
+  if Length(main.red.installs[index].name) > 0 then 
+    _port := _port + ' --title "' + main.red.installs[index].name + '" ';
+
+  if Length(path) < 1 then begin
+
+    try
+      // we launch the global install with 'node-red'
+      Result := CreateShellLink(_name, 'Run Node-RED', 'node-red', _port, '', ExpandConstant('{app}\red.ico'), 0, SW_SHOW);
+    except
+      Result := '';
+    end;
+
+  end else begin
+
+    _port := _port + ' --userDir . ';
+
+    try 
+      Result := CreateShellLink(_name, 'Run Node-RED', _run, ' node_modules\node-red\red.js ' + _port, path, ExpandConstant('{app}\red.ico'), 0, SW_SHOW);
+    except
+      Result := '';
+    end;
+
+  end;
+end;
+
+
 procedure REDFinalize(param: string);
 var
   _action: string;
@@ -2785,6 +2883,11 @@ var
   res: array of string;
   index: integer;
   _kind: sREDInstallationKind;
+
+  _global: boolean;
+  _name: string;
+  _port: string;
+  _run: string;
 
 begin
 
@@ -2811,6 +2914,8 @@ begin
   p := _path;
   if Length(_path) < 1 then begin
 
+    _global := True;
+
     // Get the details of the global installation
     SetArrayLength(res, 0);
     if RunCMD('npm config get prefix', '', res) then begin
@@ -2828,37 +2933,34 @@ begin
   
   if main.error.status then begin
       main.error.msg := 'Failed to confirm that installation of ' + GetREDActionMsg(param) + ' was successful.';
-      _path := '';
+      Exit;
   end;
 
-  if Length(_path) < 1 then Exit;
+  // if Length(_path) < 1 then Exit;
 
-  // Next: Bookkeeping in the registry!
-  _key := main.red.installs[index].key;
-  if Length(_key) < 1 then begin
-    
-    _root := '{#REDInstallationsRegRoot}';
-    i := 0;
-    repeat
-      i := i + 1;
-      k := '0000' + IntToStr(i);
-      // Pascal Script strings begin with index '1'!
-      _key := _root + '\' + Copy(k, Length(k) - 3, 4);
-    until (RegKeyExists(main.HKLM, _key) xor (i < 10000));   // True if False!!
-
-    // I'm aware that this will 'break' if 10.000+ keys are present!
-    
+  // Next: Create the Desktop / Autostart entries
+  error := false;
+  if main.red.installs[index].icon then begin
+    _name := CreateREDIcon(index, _path, ExpandConstant('{autodesktop}'));
+    if Length(_name) > 0 then begin
+      if RegWriteStringValue(main.HKLM, main.red.installs[index].key, 'Icon', _name) = False then begin
+        error := true;
+      end
+    end;
   end;
-  
-  error := False;
-  if not RegWriteStringValue(main.HKLM, _key, 'Path', _path) then error := True;
-  
-  // Additional properties follow
-  if not RegWriteStringValue(main.HKLM, _key, 'Name', main.red.installs[index].name) then error := True;
+
+  if main.red.installs[index].autostart then begin
+    _name := CreateREDIcon(index, _path, ExpandConstant('{autostartup}'));
+    if Length(_name) > 0 then begin
+      if RegWriteStringValue(main.HKLM, main.red.installs[index].key, 'Autostart', _name) = False then begin
+        error := true;
+      end
+    end;
+  end;
 
   if error then begin
-    main.error.status := True;
-    main.error.msg := 'Failed to create registry enties for Node-RED installation @ ' + _path;
+    main.error.status := true;
+    main.error.msg := 'Failed to create icon entries for Node-RED installation @ ' + _path;
   end;
 
 end;
@@ -2871,6 +2973,7 @@ var
   _rv: string;
   index: integer;
   _kind: sREDInstallationKind;
+  _icon: string;
 
 begin
 
@@ -2909,6 +3012,14 @@ begin
   // We do not remove the Registry entries here!
   // Once the installer runs another time, it will detect any obsolete entries & remove those then.
   // This allows us to keep the sequence (in the registry) for this run - without puzzling around.
+
+  // Try to remove the Desktop Icon
+  _icon := main.red.installs[index].registry.icon;
+  if Length(_icon) > 0 then DeleteFile(_icon);
+
+  // Try to remove the Autostart Icon
+  _icon := main.red.installs[index].registry.autostart;
+  if Length(_icon) > 0 then DeleteFile(_icon);
 
 end;
 
