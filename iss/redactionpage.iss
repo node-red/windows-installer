@@ -1282,7 +1282,10 @@ begin
   end;
 }
 
-  _label := 'Node-RED';
+  _label := main.red.installs[index].name;
+  if Length(_label) < 1 then 
+    _label := 'Node-RED';
+
   line := box.AddGroup('#' + IntToStr(ii) + ': ' + _label, '*', 0, nil);
 
   _add_action_item(rlikLabel, IntToStr(ii), main.red.installs[index].id, line);
