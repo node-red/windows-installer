@@ -241,7 +241,7 @@ Filename: "{tmp}\setup_loop.bat"; \
   Filename: "npm"; \
     Parameters: "uninstall {code:GetREDActionGlobal|{#i}} node-red"; \
     WorkingDir: "{code:GetREDActionPath|{#i}}"; \
-    Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+    Flags: runascurrentuser shellexec waituntilterminated runhidden; \
     StatusMsg: "Removing {code:GetREDCurrentMsg|{#i}}..."; \
     Check: RunCheck('rcsREDRemove', '{#i}'); \
     BeforeInstall: SetupRunConfig; \
@@ -252,7 +252,7 @@ Filename: "{tmp}\setup_loop.bat"; \
   Filename: "npm"; \
     Parameters: "install {code:GetREDActionGlobal|{#i}} node-red@{code:GetREDActionAction|{#i}}"; \
     WorkingDir: "{code:GetREDActionPath|{#i}}"; \
-    Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+    Flags: runascurrentuser shellexec waituntilterminated runhidden; \
     StatusMsg: "Installing {code:GetREDActionMsg|{#i}}..."; \
     Check: RunCheck('rcsREDInstall', '{#i}'); \
     BeforeInstall: REDPrepare('{#i}'); \
@@ -263,7 +263,7 @@ Filename: "{tmp}\setup_loop.bat"; \
   Filename: "npm"; \
     Parameters: "rebuild"; \
     WorkingDir: "{code:GetREDActionPath|{#i}}"; \
-    Flags: runasoriginaluser shellexec waituntilterminated runhidden; \
+    Flags: runascurrentuser shellexec waituntilterminated runhidden; \
     StatusMsg: "Rebuilding packages for {code:GetREDActionMsg|{#i}}..."; \
     Check: RunCheck('rcsREDInstall', '{#i}');
 #endsub
