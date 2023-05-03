@@ -1,4 +1,4 @@
-﻿; *****
+; *****
 ; * Windows Installer for Node-RED
 ; * Definition file for the Inno Setup compiler.
 ; * Copyright 2023 Ralph Wetzel
@@ -2399,6 +2399,7 @@ begin
   end;
 
   if step = 'rcsPython' then begin
+    if Length(main.node.selected) < 1 then Exit;
     if not main.node.run_silent then Exit;
     if not main.node.install_tools then Exit;
     bool := StrToBool(param);
@@ -2410,6 +2411,7 @@ begin
   end;
 
   if step = 'rcsVSBuildTools' then begin
+    if Length(main.node.selected) < 1 then Exit;
     if not main.node.run_silent then Exit;
     if not main.node.install_tools then Exit;
     Result := Length(main.vs.version) = 0;
