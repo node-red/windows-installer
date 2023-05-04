@@ -1,4 +1,4 @@
-; *****
+﻿; *****
 ; * Windows Installer for Node-RED
 ; * Definition file for the Inno Setup compiler.
 ; * Copyright 2023 Ralph Wetzel
@@ -105,12 +105,14 @@ WizardImageStretch=True
 WizardImageFile="graphics\sidebar\Node RED Side Graphic - BMP.bmp"
 LicenseFile="LICENSE"
 SetupIconFile={#SourcePath}\icons\node-red-icons.ico
+PrivilegesRequiredOverridesAllowed=dialog
 
 ; Installer Code Signing Data
 ; To create a test certificate: https://stackoverflow.com/questions/84847/how-do-i-create-a-self-signed-certificate-for-code-signing-on-windows
 ; To create a Secure String: $xxx = ConvertTo-SecureString plain-text-string -asPlainText -force
 ; to convert to Base64: certutil -encode .\ssCertInfo.pfx .\ssCertInfo.base64.txt
 ; Action: https://github.com/dlemstra/code-sign-action
+
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -152,7 +154,7 @@ english.MSG_FAILED_FINISHED2=Sorry for this inconvenience!
 [Run]
 
 ; main.error is the global Error flag
-; Each step checks if this is set, and if returns False@Check!
+; Each step checks if this is set, and if (it is) returns False@Check!
 
 ; Check if Node.js should be uninstalled.
 ; Run the uninstall; GUID queried from Registry.
@@ -275,19 +277,15 @@ Filename: "{tmp}\setup_loop.bat"; \
 #undef i
 
 
-
-; #include <.\contrib\IDP_1.5.1\idp.iss>
-
 [Code]
-// #include <.\contrib\JsonParser.pas>
-#include <.\iss\forward.iss>
 
-// https://stackoverflow.com/questions/20584263/how-to-install-node-js-in-custom-folder-silently-on-windows
-// msiexec /i node-v6.11.2-x64.msi TARGETDIR="C:\Program Files\nodejs\" ADDLOCAL="NodePerfCtrSupport,NodeEtwSupport,DocumentationShortcuts,EnvironmentPathNode,EnvironmentPathNpmModules,npm,NodeRuntime,EnvironmentPath" /qn
+// All data managed by this installer is pushed into one huge record called 'main'.
+// 'main' is of type rInstallerData.
+// Dedicated records in 'main' carry information regarding Node.js, RED, Python, ...
 
-// https://stackoverflow.com/questions/18506820/innosetup-how-to-pass-a-two-dimensional-string-array-to-a-function
 type
-  TNodeVersion = record
+
+  rNodeVersion = record
     key: string;
     sha: string;
     latest: string;
@@ -295,18 +293,18 @@ type
     default: boolean;
     file: string;
   end;
-  TNodeVersionList = array of TNodeVersion;
+  // TNodeVersionList = array of rNodeVersion;
 
-  TREDVersion = record
+  rREDVersion = record
     version: string;
     tag: string;
   end;
 
-  TREDVersionArray = array of TREDVersion;
+  TREDVersionArray = array of rREDVersion;
 
-  TNodeData = record
+  rNodeData = record
     majors: array of integer;   // Supported major versions as read from the INI file
-    versions: array of TNodeVersion;
+    versions: array of rNodeVersion;
     default: integer;
     selected: string;
     run_silent: boolean;
@@ -314,7 +312,6 @@ type
     current: string;
     options: TStringList;
   end;
-
 
   rREDCalcData = record
     path: string;     // if defined, ensure empty directory & create package.json
@@ -350,15 +347,6 @@ type
     registry: rREDRegData;
   end;
 
-  // TREDAction = (raNone, raInstall, raRemove);
-
-  // TREDInstallationAction = record
-  //   index: integer;
-  //   line: integer;
-  //   action: TREDAction;
-  //   installation: TREDInstallation;
-  // end;
-
   sREDListItemKind = (rlikNone, rlikAction, rlikPath, rlikGlobal, rlikPort, rlikLabel, rlikIcon, rlikAutostart);
 
   rREDListItem = record
@@ -367,8 +355,8 @@ type
     link: TObject;
   end;
 
-  TREDData = record
-    versions: array of TREDVersion;
+  rRedData = record
+    versions: array of rREDVersion;
     selected: string;
     current: string;
     installs: array of rREDInstallation;
@@ -378,12 +366,7 @@ type
     run: array of integer;    // index sequence of 'installs' to be installed. This eliminates the installs of 'rikVoid'. Populated @ UpdateReadyMemo. 
   end;
 
-  // TREDTargetObject = record
-  //  data: string;
-  //  target: TREDInstallationAction;
-  // end;
-
-  TPageID = record
+  rPageID = record
     node_license: TOutputMsgMemoWizardPage;
     node_version: TInputOptionWizardPage;
     red_license: TOutputMsgMemoWizardPage;
@@ -408,9 +391,9 @@ type
     version: string;
   end;
 
-  TInstallerData = record
-    node: TNodeData;
-    red: TREDData;
+  rInstallerData = record
+    node: rNodeData;
+    red: rRedData;
 
     // As described in the documenttion, HKLM is going be set to HKEY_LOCAL_MACHINE_64 when running on 64bit systems 
     // *AND* "the system's processor architecture is included in the value of the ArchitecturesInstallIn64BitMode [Setup] section directive"
@@ -420,37 +403,20 @@ type
     HKLM: Integer;
     bit: String;
 
-    pages: TPageID;
+    pages: rPageID;
     error: rInstallationError;    // Global Installation Error Status
     python: rPythonData;
     vs: rVSData;
 
   end;
 
-  TImageType = (imgNODE, imgRED, imgNONE);
+  sImageType = (imgNODE, imgRED, imgNONE);
 
 var
   
-  // DownloadPage: TDownloadWizardPage;
-
-  // List of <string> Node.js version numbers
-  // Read from the INI file
-  // nodeVersions: TStringList;
-
-  // Node.js version we propose to install (if none is installed)
-  // nodeVersionDefault: string;
-
-  // Record to hold relevant data of the Node.js versions
-  // we offer to install 
-  nodeVersionDetails: TNodeVersionList;
-
-  // Node-RED License Acknowledgement Page
-  // REDLicensePage: TOutputMsgMemoWizardPage;
+  // Two additional controls
   REDLicenseAcceptedRadio: TRadioButton;
   REDLicenseNotAcceptedRadio: TRadioButton;
-
-  // NodeVersionSelectionPage: TInputOptionWizardPage;
-  REDVersionSelectionPage: TInputOptionWizardPage;
 
   // As described in the documenttion, HKLM is going be set to HKEY_LOCAL_MACHINE_64 when running on 64bit systems 
   // *AND* "the system's processor architecture is included in the value of the ArchitecturesInstallIn64BitMode [Setup] section directive"
@@ -459,31 +425,48 @@ var
   // => set it as required: HKEY_LOCAL_MACHINE or HKEY_LOCAL_MACHINE_64
 
   // The list of all node versions offered to install
-  nodeVersionSelectionOptions: TStringList;
+  // nodeVersionSelectionOptions: TStringList;
   // the index the user choose to install
-  nodeVersionSelectionOptionsSelected: Integer;
+  // nodeVersionSelectionOptionsSelected: Integer;
 
   // cbHideNodeInstaller: TNewCheckBox;
   // cbInstallWindowsTools: TNewCheckBox;
 
   // The Node-RED version the user selected for installation
-  redVersionSelected: String;
+  // redVersionSelected: String;
 
   // This record holds all relevant data
-  main: TInstallerData;
+  main: rInstallerData;
 
-  testPage: TInputOptionWizardPage;
-  testPage2: TInputOptionWizardPage;
+  // testPage: TInputOptionWizardPage;
+  // testPage2: TInputOptionWizardPage;
+
+// *****
+// * Forward definition of some functions "exported" by other files
+
+// nodedetector.iss
+function detect_red_installations(var page: TOutputMarqueeProgressWizardPage): integer; forward;
+function red_list(working_dir: string): string; forward;
+
+// redactionpage.iss
+function MakeRedActionPage(page: TInputOptionWizardPage): Boolean; forward;
+
+// *
+// *****
+
+
+// *****
+// * Support functions
 
 procedure debug(message: string);
 begin
-  Log('[NR] ' + message);
+  Log('[NRI] ' + message);
 end;
 
-procedure debugInt(int: integer);
+{procedure debugInt(int: integer);
 begin
   debug(IntToStr(int));
-end;
+end;}
 
 // pastebin.com/STcQLfKR
 Function SplitString(const Value: string; Delimiter: string; Strings: TStrings): Boolean;
@@ -575,10 +558,11 @@ begin
 end;
 
 
-function CompareVersions( checkVersion, compareVersion: String): Integer;
+function CompareVersions( checkVersion, compareVersion: string): integer;
 var
   checkV, compV: TStringList;
-  i, v1, v2, l1, l2: Integer;
+  i, v1, v2, l1, l2: integer;
+  msg: string;
 
 begin
 
@@ -590,10 +574,6 @@ begin
 
   l1 := checkV.Count;
   l2 := compV.Count;
-
-  debug(checkVersion);
-  debug(compareVersion);
-  debug(IntToStr(Max(l1, l2)));
 
   for i:= 0 to Max(l1, l2) - 1 do begin
 
@@ -629,14 +609,19 @@ begin
     Result := 0;
   end;
 
-  debug(IntToStr(Result));
+  msg := '??';
+  case Result of
+    -1: msg := '<';
+     0: msg := '=';
+     1: msg := '>';
+  end;
+  // debug(checkVersion + ' ' + msg + ' ' + compareVersion);
 
 end;
 
 function GetVersion(version: String; index: Integer): Integer;
 var
   vv: TStringList;
-  v: String;
 begin
   Result := -1;
   vv := TStringList.Create;
@@ -663,20 +648,10 @@ begin
   Result := GetVersion(version, 2);
 end;
 
-procedure set_image(img: TImageType);
+procedure set_image(img: sImageType);
 var
-//  node_image: string;
-//  red_image: string;
   image: string;
 begin
-
-//  node_image := 'nodejs.bmp';
-//  red_image := 'node-red.bmp';
-
-//  if img = imgNONE then begin
-//    WizardForm.WizardSmallBitmapImage.Visible := False;
-//    Exit;
-//  end;
 
   case img of
     imgNone: begin
@@ -695,21 +670,6 @@ begin
 
 end;
 
-function GetREDInstallationIndex(link: TObject): integer;
-var
-  i: integer;
-  _length: integer;
-
-begin
-  Result := -1;
-  for i:=0 to GetArrayLength(main.red.installs) - 1 do begin
-    if main.red.installs[i].id = link then begin
-      Result := i;
-      break;
-    end;
-  end;
-  debug('GetRED: ' + IntToStr(Result));
-end;
 
 function BoolToStr(bool: boolean): string;
 begin
@@ -747,8 +707,10 @@ begin
   end;
 end;
 
-// Additional page to acknowledge Node-RED License
-// https://stackoverflow.com/questions/34592002/how-to-create-two-licensefile-pages-in-inno-setup
+
+// *****
+// * Additional page to acknowledge Node-RED License
+// * https://stackoverflow.com/questions/34592002/how-to-create-two-licensefile-pages-in-inno-setup
 procedure CheckREDLicenseAccepted(Sender: TObject);
 begin
   // Update Next button when user (un)accepts the license
@@ -768,9 +730,6 @@ begin
 end;
 
 function CreateREDLicensePage(after: Integer): TOutputMsgMemoWizardPage;
-// var
-  // IndependenceFileName: string;
-  // IndependenceFilePath: string;
 
 begin
   
@@ -783,28 +742,19 @@ begin
   // Shrink memo box to make space for radio buttons
   Result.RichEditViewer.Height := WizardForm.LicenseMemo.Height;
 
-  // Load Node-RED LIcense
-  // Loading ex-post, as Lines.LoadFromFile supports UTF-8,
-  // contrary to LoadStringFromFile.
-  // REDLicensePage.RichEditViewer.Lines.LoadFromFile(ExpandConstant('{tmp}\{#REDLicenseTmpFileName}'));
-
   // Clone accept/do not accept radio buttons for the second license
   REDLicenseAcceptedRadio :=
     CloneLicenseRadioButton(WizardForm.LicenseAcceptedRadio);
   REDLicenseNotAcceptedRadio :=
     CloneLicenseRadioButton(WizardForm.LicenseNotAcceptedRadio);
 
-  // REDLicenseAcceptedRadio.Top := 5;
-  // REDLicenseNotAcceptedRadio.Top := REDLicenseAcceptedRadio.Top + REDLicenseAcceptedRadio.Height + 5;
-
-  // Customize captions
-  // IndependenceAcceptedRadio.Caption := 'I acknowledge this statement.'
-  // IndependenceNotAcceptedRadio.Caption := 'I do not acknowledge this statement.'
-
   // Initially not accepted
   REDLicenseNotAcceptedRadio.Checked := True;
 
 end;
+
+// *
+// *****
 
 // *****
 // ** RunCMD
@@ -813,11 +763,16 @@ end;
 function RunCMD(Command, WorkingDir: string; var ResultArray: TArrayOfString): Boolean;
 
 var
-  bat, file, res: String;
-  rc, i: Integer;
+  bat, file, res: string;
+  rc, i: integer;
 
-  p1, p2: String;
+  p1, p2: string;
+  msg: string;
 begin
+
+  msg := '$> ' + Command;
+  if Length(WorkingDir) > 0 then msg := msg + ' @ ' + WorkingDir;
+  debug(msg);
 
   Result := False;
   
@@ -844,14 +799,12 @@ begin
     if Exec(file, '', WorkingDir, SW_HIDE, ewWaitUntilTerminated, rc) then begin
       if LoadStringsFromFile(res, ResultArray) then begin
         for i:=0 to GetArrayLength(ResultArray) -1 do begin
-          debug(ResultArray[i]);
+          debug('>> ' + ResultArray[i]);
         end;
         Result:=True;
       end;
     end else begin
-      debug(Command);
-      debug(WorkingDir);
-      debug(SysErrorMessage(rc));
+      debug('>> ' + SysErrorMessage(rc));
     end;
   end;
 end;
@@ -903,7 +856,7 @@ var
 
   _nvp: TInputOptionWizardPage;
 
-  _possible: array of TNodeVersion;   // the Node.js versions we know of
+  _possible: array of rNodeVersion;   // the Node.js versions we know of
   _options: TStringList;              // the Node.js versions we offer for download;
                                       // this may include '' for "Keep the current..."
   _current: string;
@@ -912,16 +865,13 @@ begin
 
   Result := False;
 
-  debug('PrepareNodeVersionSelectionPage');
+  // debug('PrepareNodeVersionSelectionPage');
 
   // Page to select a Node.js version
   _nvp := main.pages.node_version;
   if _nvp = nil then Exit;
 
-  debug('PrepareNodeVersionSelectionPage1');
-
   _nvp.SubCaptionLabel.Font.Style := [fsBold];
-
   _nvp.CheckListBox.OnClickCheck := @_nodeVersion_OnClickNodeVersion;
 
   // Additional checkboxes:
@@ -956,6 +906,7 @@ begin
   if RegKeyExists(main.HKLM, 'SOFTWARE\Node.js') then begin
     if RegQueryStringValue(main.HKLM, 'SOFTWARE\Node.js', 'Version', _current) = True then begin
       _nvp.SubCaptionLabel.Caption := 'Currently installed: Node.js ' + _current;
+      debug('According Registry, Node.js v' + _current + ' is installed.');
     end;
   end;
 
@@ -965,8 +916,6 @@ begin
   _options := TStringList.Create;
 
   _possible := main.node.versions;
-
-  debug('PrepareNodeVersionSelectionPage2');
 
   if _current = '' then begin
       _nvp.SubCaptionLabel.Caption := 'Currently there''s no Node.js version installed!';
@@ -984,7 +933,6 @@ begin
 
   for i := 0 to GetArrayLength(_possible) - 1  do begin
 
-    debug(_possible[i].latest);
     _options.Add(_possible[i].latest);
 
     ii := CompareVersions(_current, _possible[i].latest);
@@ -999,7 +947,7 @@ begin
     sFlag := '';
     if GetVersionMajor(_current) < GetVersionMajor(_possible[i].latest) then begin
       if GetVersionMajor(_possible[i].latest) = main.node.default then begin
-        debugInt(main.node.default);
+        // debugInt(main.node.default);
         sFlag := ' | RECOMMENDED ';    
       end;
     end;
@@ -1025,97 +973,8 @@ end;
 // *****
 
 // *****
-// ** REDVersionSelectionPage
-// **
-
-// var 
-//    _redVersion_page: TInputOptionWizardPage;
-
-
-
-function PrepareREDVersionSelectionPage(): Boolean;
-
-var
-  res: TArrayOfString;  // this exact type is mandatory here! 
-
-  splitres: TStringList;
-
-  red_versions, red_buffer: TREDVersionArray;
-
-  i, ii, ibuffer, rvLength: Integer;
-  tag, rv, line: String;
-  rvv: TStringList;
-
-  prefix: String;
-
-  current_version: String;
-
-  _rvp: TInputOptionWizardPage;
-
-begin
-
-  Result := False;
-
-  // Page to select a Node.js version
-  _rvp := main.pages.red_version;
-  if _rvp = nil then Exit;
-
-  _rvp.SubCaptionLabel.Font.Style := [fsBold];
-
-  current_version := main.red.current;
-
-  if current_version = '' then begin
-    _rvp.SubCaptionLabel.Caption := 'Currently there''s no Node-RED version installed!';
-
-  end else begin
-    _rvp.SubCaptionLabel.Caption := 'Currently installed: Node-RED v' + current_version;
-    
-  end;
-
-  rvLength := GetArrayLength(main.red.versions);
-  for i := 0 to rvLength - 1 do begin
-
-    // From Hi to Lo
-    rv := main.red.versions[rvLength - 1 - i].version;
-    tag := main.red.versions[rvLength - 1 - i].tag;
-    
-    ii := CompareVersions(current_version, rv);
-
-    line := tag;
-    if Length(line) > 0 then
-      line := ' | ' + line;
-
-    if ii > 0 then begin
-
-      _rvp.Add('Install Node-RED v' + rv + ANSIUpperCase(line));
-      continue;
-    end else if ii = 0 then begin
-      if Length(line) > 0 then
-        line := line + ', ';
-      _rvp.Add('Keep Node-RED v' + rv + ANSIUpperCase(line + 'current'));
-      _rvp.Values[i] := True;
-    end else if ii < 0 then begin
-      _rvp.Add('Update to Node-RED v' + rv + ANSIUpperCase(line));
-    end;
-
-    if Length(current_version) < 1 then
-      if tag = 'latest' then
-        _rvp.Values[i] := True;
-
-  end;
-
-  Result := True;
-
-end;
-
-// ** END
-// ** REDVersionSelectionPage
-// *****
-
-// *****
 // ** Data Preparation Page
-// ** (which isn't a true interactive page,
-// ** but a Download & a Progress page inserted after wpWelcome)
+// ** (which isn't a true interactive page, but a Download & a Progress page inserted after wpWelcome)
 
 function _redversion_insert_version(version, tag: String; red_versions: TREDVersionArray): TREDVersionArray;
 var
@@ -1126,11 +985,11 @@ var
 begin
 
   // Do not accept versions that are lower than #REDMinVersion
-  debug('cv: ' + version + ' / {#REDMinVersion}');
+  // debug('cv: ' + version + ' / {#REDMinVersion}');
 
   cv := CompareVersions(version, '{#REDMinVersion}');
 
-  debug('cv: ' + version + ' / {#REDMinVersion}' + ' = ' + IntToStr(cv));
+  // debug('cv: ' + version + ' / {#REDMinVersion}' + ' = ' + IntToStr(cv));
 
   if cv < 0 then begin
     Result := red_versions;
@@ -1154,7 +1013,7 @@ begin
 
   ibuffer:= 0;
   for ii:= 0 to rvLength - 1 do begin
-    debug(version + ' ? ' + red_versions[ii].version);
+    // debug(version + ' ? ' + red_versions[ii].version);
 
     if Length(version) > 0 then begin
 
@@ -1203,7 +1062,6 @@ function RunDataPrepPage(): Boolean;
 
 var
   _ppage: TOutputMarqueeProgressWizardPage;
-  _iProgress: Integer;
 
   i, ii, having: integer;
   nvv: array of integer;  
@@ -1217,18 +1075,14 @@ var
   file: array of string;
 
   majors: array of integer;
-  new_version: TNodeVersion;
-
+  
   // Node-RED
   res: array of string;
   rvv, splitres: TStringList;
   tag, rv: string;
   red_versions: TREDVersionArray;
   // current_version: string;
-  prefix: string;
-
-  _btv: string;
-
+  
 begin
 
   _ppage := CreateOutputMarqueeProgressPage('Processing additional data...', 'We collect and analyze data to prepare the installation.');
@@ -1246,7 +1100,7 @@ begin
     for i := 0 to GetArrayLength(nvv) - 1 do begin
 
       nv := IntToStr(nvv[i]);
-      debug(nv);
+      // debug(nv);
       // Download the SHA file
       tmp_file_name := ExpandConstant('{tmp}') + '\node' + nv + '.sha';
       // check := idpDownloadFile('https://nodejs.org/dist/latest-v' + nv + '.x/SHASUMS256.txt', tmp_file_name);      
@@ -1316,7 +1170,7 @@ begin
           file := tmp_file_name;
         end;
 
-        debug(main.node.versions[having].latest);
+        debug('Latest Node.js @ v' + nv + ': ' + main.node.versions[having].latest);
 
         // re-construct the - now confirmed - 'majors' array
         having := GetArrayLength(majors);
@@ -1354,7 +1208,7 @@ begin
     _ppage.SetText('Requesting Node-RED version info from npm...', '');
     RunCMD('npm dist-tag ls node-red', '', res);
 
-    debug('npm dist-tag: ' + IntToStr(GetArrayLength(res)));
+    // debug('npm dist-tag: ' + IntToStr(GetArrayLength(res)));
 
     for i:= 0 to GetArrayLength(res) - 1 do begin
       
@@ -1369,12 +1223,12 @@ begin
       end else
         continue;
 
-      debug(rv + ' | ' + tag);
+      // debug(rv + ' | ' + tag);
       red_versions := _redversion_insert_version(rv, tag, red_versions);
 
     end;
 
-    debug('red_versions: ' + IntToStr(GetArrayLength(red_versions)));
+    // debug('red_versions: ' + IntToStr(GetArrayLength(red_versions)));
 
     if GetArrayLength(red_versions) > 0 then begin
       main.red.npm := True;
@@ -1386,7 +1240,7 @@ begin
       
       tmp_file_name := ExpandConstant('{tmp}\') + '{#REDLatestTmpFileName}';
 
-      debug(tmp_file_name);
+      // debug(tmp_file_name);
 
       if FileExists(tmp_file_name) then begin
 
@@ -1409,17 +1263,17 @@ begin
           // ... <meta property="og:url" content="/node-red/node-red/releases/tag/3.0.2" /> ...
           // This is VERY fragile ... !!
           if SplitString(line, '<meta property=', parts) then begin
-            debug(line);
+            // debug(line);
             for ii:=0 to parts.Count - 1 do begin
               _ppage.Animate();
               line := parts[ii];
-              debug(line);
+              // debug(line);
               if StringChangeEx(line, '"og:url" content="/node-red/node-red/releases/tag/', '', True) > 0 then begin
-                debug(line);
+                // debug(line);
                 splitres := TStringList.Create;
                 if SplitString(line, '" />', splitres) then begin
                   line := splitres[0];
-                  debug(line);
+                  // debug(line);
                   red_versions := _redversion_insert_version(line, 'latest', red_versions);
                   check:=True;
                   break;
@@ -1437,7 +1291,7 @@ begin
     end;
 
     // Now merge the "Additional Versions" as defined in setup.ini
-    debug('{#REDAddVersions}');
+    // debug('{#REDAddVersions}');
 
     // Att: There's - with intention! - an addition ',' appended to REDAddVersions
     // SplitString only returns true, if the delimieter was found at least once!
@@ -1445,7 +1299,7 @@ begin
       for i := 0 to rvv.Count - 1 do begin
         rv := rvv.Strings[i];
         StringChangeEx(rv, ' ', '', True);
-        debug(rv);
+        // debug(rv);
         red_versions := _redversion_insert_version(rv, '', red_versions);
       end;
     end;
@@ -1577,7 +1431,7 @@ begin
   // If not, let default version become min version
   if (main.node.default < 0) then begin
     main.node.default := nvv[0];
-    debug('Node.js Recommended Version definition: ''' + default_version + ''' not in validated list of supported versions. Forced to v' + IntToStr(main.node.default) + '!');
+    debug('** Warning: INI-File defined ''' + default_version + ''' as recommended version - that yet is not in validated list of supported versions. Forced to v' + IntToStr(main.node.default) + '!');
   end;
 
   Result:=True;
@@ -1590,12 +1444,7 @@ var
   
   i, having: Integer;
   msg: String;
-
   wf: TWizardForm;
-
-  _lb: TNewCheckListBox;
-
-  tp2: TInputQueryWizardPage;
 
 begin
 

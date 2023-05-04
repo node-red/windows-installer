@@ -68,6 +68,25 @@ begin
 
 end;
 
+// When an installation setup dataset is created (either for an existing installation or representing a new one),
+// a new TObject is created as 'id' property.
+// This 'id' is used to link between entries in the CheckListBox & main.red.installs
+
+function GetREDInstallationIndex(link: TObject): integer;
+var
+  i: integer;
+
+begin
+  Result := -1;
+  for i:=0 to GetArrayLength(main.red.installs) - 1 do begin
+    if main.red.installs[i].id = link then begin
+      Result := i;
+      break;
+    end;
+  end;
+  debug('GetRED: ' + IntToStr(Result));
+end;
+
 function _add_installation(index: integer): Boolean; forward;
 function _add_new_installation(): Boolean; forward;
 procedure _make_headline(); forward;
@@ -340,7 +359,7 @@ begin
     end;
   end;
 
-  debugInt(i);
+  // debugInt(i);
 
   if _error > 0 then begin
 
