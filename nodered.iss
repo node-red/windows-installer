@@ -2041,6 +2041,7 @@ begin
       end;
 
       if ((main.bit = 'x64') xor (md5 = '{#PyMD5x64}'))  or ((main.bit = 'x86') xor (md5 = '{#PyMD5x86}')) then begin
+        DeleteFile(ExpandConstant('{tmp}\python_installer.exe'));
         Result := Result + 'Invalid MD5 sum calculated for Installer for Python (' + main.bit + '): ' + md5;
         Exit;
       end;
