@@ -57,6 +57,9 @@
 #define py ReadIni(INIFile, "python", "version")
 ; for pth we extract the first two digits of py      
 #define pth Copy(StringChange(py, '.', ''), 1, 2)
+; md5 sum for the potential python installer files
+#define PyMD5x86 ReadIni(INIFile, "python", "win32")
+#define PyMD5x64 ReadIni(INIFile, "python", "amd64")
 
 ; the download link of the VS Studio Build Tools
 ; check as well: https://visualstudio.microsoft.com/downloads/
@@ -1958,6 +1961,7 @@ var
   _pv: string;
   res: TArrayOfString;
   parts: TStringList;
+  md5: string;
 
 begin
 
@@ -2024,6 +2028,23 @@ begin
     end;
   finally
     _dp.Hide;
+  end;
+
+  if main.node.install_tools then begin
+    if Length(main.python.path) < 1 then begin
+      // Verify MD5 for downloaded python installer.
+      try
+        md5 := GetMD5OfFile(ExpandConstant('{tmp}\python_installer.exe'));
+      except
+        Result := Result + 'Failed to calculate MD5 Sum of downloaded Installer for Python.';
+        Exit;
+      end;
+
+      if ((main.bit = 'x64') xor (md5 = '{#PyMD5x64}'))  or ((main.bit = 'x86') xor (md5 = '{#PyMD5x86}')) then begin
+        Result := Result + 'Invalid MD5 sum calculated for Installer for Python (' + main.bit + '): ' + md5;
+        Exit;
+      end;
+    end;
   end;
 
   if (main.node.run_silent and main.node.install_tools) then begin
