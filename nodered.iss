@@ -103,7 +103,7 @@ VersionInfoDescription={#ReadIni(INIFile, "installer", "description", "")}
 VersionInfoVersion={#ReadIni(INIFile, "installer", "version", "")}
 WizardStyle=modern
 WizardImageAlphaFormat=defined
-WizardImageBackColor=clWhite
+; WizardImageBackColor=clWhite
 WizardImageStretch=True
 WizardImageFile="graphics\sidebar\Node RED Side Graphic - BMP.bmp"
 LicenseFile="LICENSE"
@@ -1086,6 +1086,8 @@ var
   red_versions: TREDVersionArray;
   // current_version: string;
   
+  msg: string;
+
 begin
 
   _ppage := CreateOutputMarqueeProgressPage('Processing additional data...', 'We collect and analyze data to prepare the installation.');
@@ -1099,6 +1101,8 @@ begin
     // This serves as well to verify that an internet connection is present.
 
     nvv := main.node.majors;
+
+    debug('Trying to fetch version data of latest Node.js releases:');
 
     for i := 0 to GetArrayLength(nvv) - 1 do begin
 
@@ -1208,7 +1212,10 @@ begin
 
     rvv := TStringList.Create;
 
-    _ppage.SetText('Requesting Node-RED version info from npm...', '');
+    msg := 'Requesting Node-RED version info from npm';
+    _ppage.SetText(msg + '...', '');
+    debug(msg + ':');
+
     RunCMD('npm dist-tag ls node-red', '', res);
 
     // debug('npm dist-tag: ' + IntToStr(GetArrayLength(res)));
@@ -1726,12 +1733,11 @@ end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 var
-  m, mm: string;
+  m: string;
   i, ii, l, f: integer;
   tag: integer;
   p, pp: string;
   c, cc: boolean;
-  _lbl: string;
   _global: boolean;
 
   _paths: TStringList;
@@ -1952,15 +1958,13 @@ end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  i, ii: integer;
+  i: integer;
 
   _dp: TDownloadWizardPage;
 
   _nv, _msi, _sha: string;
 
-  _pv: string;
   res: TArrayOfString;
-  parts: TStringList;
   md5: string;
 
 begin
@@ -2191,7 +2195,7 @@ function GetInstalledNodeGUID(nv: string): string;
 var
   _base: string;
   _keys: TArrayOfString;
-  i, ii: integer;
+  i: integer;
   _name: string;
   _nv: string;
 
@@ -2331,7 +2335,6 @@ function GetNodeVersionCall(msg: string): string;
 var
   _page: TOutputMarqueeProgressWizardPage;
   res: array of string;
-  i: integer;
   _nv: string;
 
 begin
@@ -2399,7 +2402,6 @@ procedure Confirm(step, param: string);
 var
   _nvC: string;
   _nvR: string;
-  check: boolean;
   _pyp: string;
   _vs: string;
 
@@ -2757,10 +2759,7 @@ procedure REDFinalize(param: string);
 var
   _action: string;
   _path: string;
-  _key: string;
-  i: integer;
-  k, p: string;
-  _root: string;
+  p: string;
   error: boolean;
   _rv: string;
   res: array of string;
@@ -2769,8 +2768,6 @@ var
 
   _global: boolean;
   _name: string;
-  _port: string;
-  _run: string;
 
 begin
 

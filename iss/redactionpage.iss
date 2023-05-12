@@ -186,26 +186,12 @@ procedure _on_dblclick(Sender: TObject);
 var
   index: integer;
   box: TNewCheckListBox;
-  _form: TSetupForm;
-  _edit: TNewEdit;
-  _ok, _cancel: TNewButton;
-  W: integer;
 
   _label: string;
   _new_label: string;
 
   _port: integer;
-  _new_port: integer;
-
-  i, ii: integer;
-
-  fs: TFontStyles;
-
   _path: string;
-  _ppage: TOutputMarqueeProgressWizardPage;
-  res: array of string;
-  rv: string;
-  _error: integer;
 
   k: sREDListItemKind;
   _inst_index: integer;
@@ -294,26 +280,12 @@ end;
 
 procedure _on_add_red(Sender: TObject);
 var
-  index: integer;
-  box: TNewCheckListBox;
-  _form: TSetupForm;
-  _edit: TNewEdit;
-  _ok, _cancel: TNewButton;
-  W: integer;
-
   _label: string;
-  _new_label: string;
-
-  _port: integer;
-  _new_port: integer;
 
   i: integer;
 
-  fs: TFontStyles;
-
   _path: string;
   _ppage: TOutputMarqueeProgressWizardPage;
-  res: array of string;
   rv: string;
   _error: integer;
 
@@ -730,7 +702,6 @@ var
   fs: TFontStyles;
 
   i, ii: integer;
-  _ai: integer;
   _label: string;
 
   _id: TObject;
@@ -1042,7 +1013,6 @@ var
   rvl: integer;
   i, ii: integer;
   cv, rv, tag: string;
-  line: string;
   index: integer;
 
   _id: TObject;
@@ -1255,7 +1225,7 @@ var
   _empty: rREDInstallation;
   _label: string;
 
-  i, ii: integer;
+  ii: integer;
   k: sREDInstallationKind;
 
 begin

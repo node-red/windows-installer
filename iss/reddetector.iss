@@ -59,9 +59,7 @@ end;
 function detect_global_red(var page: TOutputMarqueeProgressWizardPage): integer;
 var
   res: array of string;
-  rvv, splitres: TStringList;
-  tag, rv: string;
-  prefix: string;
+  rv: string;
   i: integer;
   _path: string;
   _key: string;
@@ -102,9 +100,7 @@ end;
 
 function detect_path_red(var page: TOutputMarqueeProgressWizardPage; path: string): integer;
 var
-  res: array of string;
-  rvv, splitres: TStringList;
-  tag, rv: string;
+  rv: string;
   i, having: integer;
 
   _subkeys: array of string;
@@ -115,7 +111,6 @@ var
   check: boolean;
   _key: string;
 
-  _data: string;
 begin
 
   Result := 0;
