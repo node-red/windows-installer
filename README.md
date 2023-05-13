@@ -1,4 +1,5 @@
-# node-red-windows-installer
+# Windows Installer for Node-RED
+
 The Node-RED installer for Windows
 
 Current state: **Beta** stage -> Feature complete, operational.
