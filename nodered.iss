@@ -1,4 +1,4 @@
-﻿; *****
+; *****
 ; * Windows Installer for Node-RED
 ; * Definition file for the Inno Setup compiler.
 ; * Copyright 2023 Ralph Wetzel
@@ -1748,6 +1748,11 @@ var
 begin
   
   _paths:= TStringList.Create;
+
+  // Never try to npm install into our App Installation Dir
+  p := ExpandConstant('{#SetupSetting('DefaultDirName')}');
+  _paths.Add(p);
+  
   _error := False;
 
   m:=     '*****************' + NewLine;
