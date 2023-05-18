@@ -1174,7 +1174,7 @@ begin
 
   if installation.kind = rikNew then begin
 
-    _path := ExpandConstant('{autopf}');
+    _path := ExpandConstant('{commonpf32}');
 
     // Design decision:
     // If the selected directory is empty, we install into this directory
