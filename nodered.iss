@@ -2851,6 +2851,52 @@ begin
 end;
 
 
+function RemoveDirEx(dirName: string): boolean;
+var
+  FindRec: TFindRec;
+  _path: string;
+  _delete: boolean;
+begin
+
+  Result := true;
+  
+  if FindFirst(AddBackslash(dirName)+'*', FindRec) then begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') then begin
+          _path := AddBackslash(dirName) + FindRec.Name;
+          if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) > 0 then begin
+            Result := RemoveDirEx(_path) and Result;
+          end else begin
+            _delete := false;
+            case FindRec.Name of
+              'package.json': _delete := true;
+              'package-lock.json': _delete := true;
+              '.package-lock.json': _delete := true;
+            else
+              begin
+                debug('Found unexpected file ''' + FindRec.Name + ''' while removing Node-RED installation @ ' + RemoveBackslash(dirName) + '. Directory will be kept.');
+                Result := false;
+              end;
+            end;
+            if _delete then begin
+              Result := DeleteFile(_path) and Result;
+            end;
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+
+  if Result then begin
+    Result := RemoveDir(RemoveBackslash(dirName));
+  end;
+
+end;
+
+
 procedure REDRemove(param: string);
 var
   _path, p: string;
@@ -2905,6 +2951,9 @@ begin
   // Try to remove the Autostart Icon
   _icon := main.red.installs[index].registry.autostart;
   if Length(_icon) > 0 then DeleteFile(_icon);
+
+  // Now try to empty & remove the directory
+  if Length(_path) > 0 then RemoveDirEx(_path);
 
 end;
 
