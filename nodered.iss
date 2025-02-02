@@ -20,8 +20,12 @@
 ; Node.js Default Version - that we propose to install if none is present
 #define NodeVersionRecommended ReadIni(INIFile, "node", "recommended")
 
+; Node.js version index file - that we process to get the latest available version number
+#define NodeVersionIndex ReadIni(INIFile, "node", "index")
+
 ; comma-separated list of major versions numbers we offer for download
-#define NodeVersions ReadIni(INIFILE, "node", "versions", NodeVersionRecommended)                                              
+; ATT: this list is only used as fallback, in case of issues w/ the index file download  
+#define NodeVersions ReadIni(INIFILE, "node", "versions_fallback", NodeVersionRecommended)                                              
 
 ; URL to download node.js license from
 #define NodeLicenseURL ReadIni(INIFILE, "node", "license")
@@ -1375,6 +1379,10 @@ var
   nvv: array of integer;
   default_version: string;
 
+  json, file, line, part: string;
+  nodejsjson, parts, vv: TArrayOfString;
+  version, v: integer;
+
 begin
 
   // check the bit status of this platform
@@ -1390,11 +1398,99 @@ begin
   default_version := '{#Trim(NodeVersionRecommended)}';
   main.node.default := -1;
 
-  // There's one issue with the following logic:
-  // We cannot test *NOW*, if the version given in the INI is actually available - by referencing back to the nodejs website
-  // It might be though, that we offer a version here that doesn't exist.
-  // We'll do this check later ... but here it might create comments!
+  // Try to collect the highest available version number of node.js
+  // This serves as well to verify that an internet connection is present.
 
+  version := 0;
+  json := '{#nodeVersionIndex}';
+
+  Result := True;
+
+  try
+    DownloadTemporaryFile(json, 'nodejs.json', '', nil);
+  except
+    debug('Failed to download Node.js index file from "' + json + '":');
+    debug(AddPeriod(GetExceptionMessage));
+
+    // Error and out!
+    TaskDialogMsgBox('Error',
+        'Failed to get Node.js index file.' + #13#10 + 'Please ensure that you''re connected to the Internet.',   
+        mbCriticalError,
+        MB_OK, [], 0);
+  
+    Result := False;
+
+  end;
+
+  if not Result then Exit;
+
+  file := ExpandConstant('{tmp}\nodejs.json');
+  if FileExists(file) then begin
+
+    if LoadStringsFromFile(file, nodejsjson) then begin
+
+      for i := 0 to GetArrayLength(nodejsjson) - 1 do begin
+
+        // Example line in file:
+        // {"version":"v23.7.0","date":"2025-01-30", ... ,"security":false},
+        
+        if Pos('"version":"', nodejsjson[i]) > 0 then begin
+
+          // #1: eliminate "{}," & split remaining line into elements
+          line := Copy(nodejsjson[i], 2, Length(nodejsjson[i]) - 3);
+          parts := StringSplitEx(line, [','], '"', stAll);
+
+          for ii := 0 to GetArrayLength(parts) - 1 do begin
+
+            part := parts[ii];
+            // #2: part of interest looks like this:
+            // "version":"v23.7.0"
+            if StringChangeEx(part, '"version":"v', '', True) > 0 then begin
+
+              // #3: Remaining string looks like '23.7.0"'
+              // Split this & get first index
+              vv := StringSplitEx(part, ['.'], '"', stAll);
+
+              // get the max version number
+              version := StrToIntDef(vv[0], 0);
+
+            end;
+
+            if version > 0 then break;
+
+          end;
+        end;
+
+        if version > 0 then break;
+
+      end;
+    end;
+
+    // Inno Style round ;)
+    version := (version / 2) * 2;
+    debug('Highest available LTS version seems to be v' + IntToStr(version) + '.');
+
+  end;
+
+  if version > 0 then begin
+  
+    // the safe way!
+    for i:= 0 to 2 do begin
+      v := version - i*2;
+      if v > 0 then begin
+        having := GetArrayLength(nvv);
+        SetArrayLength(nvv, having + 1);
+        nvv[having] := v;
+
+        if default_version = IntToStr(v) then
+          main.node.default := i;
+
+      end;
+    end;
+
+  end else begin
+
+    // FALLBACK - that must be maintained!! 
   // Read the major Node.js versions - offered to install - from the INI
   node_versions := TStringList.Create;
   node_versions.Duplicates := dupIgnore
@@ -1420,6 +1516,8 @@ begin
         // That's fine as well...
       end;
     end;
+    end;
+  
   end;
 
   // Bail out - bail out!
@@ -1431,20 +1529,35 @@ begin
     Exit;
   end;
 
+  // check if default version is in list of to-be-offered versions.
+  // if not, add it!
+  if (main.node.default < 0) then begin
+
+    v := StrToIntDef(default_version, 0);
+    if v > 0 then begin
+      having := GetArrayLength(nvv);
+      SetArrayLength(nvv, having + 1);
+      nvv[having] := v;
+      main.node.default := v;
+
+    end else begin
+
+      // If not a valid number, let default version become min version
+      QuickSort(nvv, Low(nvv), High(nvv));
+      main.node.default := nvv[0]
+
+    end;
+
+  end else begin
+    // index to value
+    main.node.default := nvv[main.node.default];
+  end;
+
   // Now sort it ascending
   QuickSort(nvv, Low(nvv), High(nvv));
 
   // Keep this for later use
   main.node.majors := nvv;
-
-  // check if default version is supported.
-  // If not, let default version become min version
-  if (main.node.default < 0) then begin
-    main.node.default := nvv[0];
-    debug('** Warning: INI-File defined ''' + default_version + ''' as recommended version - that yet is not in validated list of supported versions. Forced to v' + IntToStr(main.node.default) + '!');
-  end;
-
-  Result:=True;
 
 end;
 
